@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://compile-lens.dev/schema/v0.5.0.json",
+  "title": "compile-lens session artifact",
+  "description": "Schema v0.5.0 for the .cls.json artifact exchanged from Python collectors to Rust analyzers. Layout decision: see ADR-021 (semantic-domain hybrid; nest objects, flatten scalars; sensitivity via field-level redaction map; normalized top-level arrays).",
+  "type": "object",
+  "required": ["schema_version", "session"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.5.0",
+      "description": "Strict SemVer. A minor bump requires a cls-schema-migrate function (D10)."
+    },
+    "session": { "$ref": "#/$defs/Session" },
+    "graph_breaks": { "type": "array", "items": { "$ref": "#/$defs/GraphBreak" } },
+    "recompilations": { "type": "array", "items": { "$ref": "#/$defs/Recompilation" } },
+    "compiled_graphs": { "type": "array", "items": { "$ref": "#/$defs/CompiledGraph" } },
+    "compile_phases": { "type": "array", "items": { "$ref": "#/$defs/CompilePhase" } },
+    "iterations": { "type": "array", "items": { "$ref": "#/$defs/Iteration" } },
+    "lint_findings": { "type": "array", "items": { "$ref": "#/$defs/LintFinding" } },
+    "kernels": { "type": "array", "items": { "$ref": "#/$defs/Kernel" } },
+    "roofline_predictions": { "type": "array", "items": { "$ref": "#/$defs/RooflinePrediction" } }
+  },
+
+  "$defs": {
+    "RedactionPolicy": {
+      "type": "string",
+      "enum": ["default-strict", "internal", "confidential", "public-safe"],
+      "description": "Controls which fields the collector filters at capture time. See redaction_policy.md."
+    },
+
+    "Session": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "timestamp", "torch_version", "redaction_policy"],
+      "description": "Session metadata. Semantic-domain hybrid layout (ADR-021): atomic scalars flat, structured fields nested.",
+      "properties": {
+        "id": { "type": "string", "description": "UUID v4." },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "torch_version": { "type": "string" },
+        "triton_version": { "type": "string" },
+        "cuda_version": { "type": "string" },
+        "python_version": { "type": "string" },
+        "gpu_name": { "type": "string" },
+        "host": { "type": "string", "description": "Redacted by default per redaction_policy (field-level redaction map, not a structural group)." },
+        "command": { "type": "string", "description": "Redacted by default per redaction_policy." },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "iteration_count": { "type": "integer", "minimum": 0 },
+        "git_sha": { "type": "string" },
+        "workspace_fingerprint": { "type": "string" },
+        "rank": { "type": "integer", "minimum": 0 },
+        "world_size": { "type": "integer", "minimum": 1 },
+        "redaction_policy": { "$ref": "#/$defs/RedactionPolicy" },
+        "collector_versions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of collector name -> version."
+        },
+        "compile_config": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Mirrors the torch.compile() call (semantic domain: compile invocation).",
+          "properties": {
+            "fullgraph": { "type": "boolean" },
+            "dynamic": { "type": ["boolean", "null"] },
+            "backend": { "type": "string" },
+            "mode": { "type": "string" },
+            "options": { "type": "object", "additionalProperties": true, "description": "Open map; cannot be flattened (ADR-021)." }
+          }
+        },
+        "env_snapshot": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Runtime environment (semantic domain: os.environ + seed).",
+          "properties": {
+            "relevant_env_vars": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Whitelisted env vars known to affect torch.compile. Open map. Values redactable."
+            },
+            "random_seed": { "type": ["integer", "null"] }
+          }
+        }
+      }
+    },
+
+    "GraphBreak": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["break_id", "reason"],
+      "properties": {
+        "break_id": { "type": "string" },
+        "location": { "$ref": "#/$defs/SourceLocation" },
+        "reason": { "type": "string" },
+        "op_or_construct": { "type": "string" },
+        "fallback_kind": { "type": "string" }
+      }
+    },
+
+    "Recompilation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["recompilation_id"],
+      "properties": {
+        "recompilation_id": { "type": "string" },
+        "compiled_function_id": { "type": "string" },
+        "trigger_reason": { "type": "string" },
+        "failed_guard": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "guard_id": { "type": "string" },
+            "expression": { "type": "string" },
+            "previous_value": { "type": "string" },
+            "new_value": { "type": "string" }
+          }
+        },
+        "occurred_at_step": { "type": "integer", "minimum": 0 },
+        "wall_clock_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+
+    "CompiledGraph": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["graph_id"],
+      "properties": {
+        "graph_id": { "type": "string" },
+        "compiled_function_id": { "type": "string" },
+        "fx_graph_path": { "type": "string" },
+        "inductor_ir_path": { "type": "string" },
+        "guard_list": { "type": "array", "items": { "type": "string" } },
+        "kernel_ids": { "type": "array", "items": { "type": "string" }, "description": "Cross-reference into kernels[] (normalized top-level, ADR-021)." },
+        "compile_phases_summary": { "type": "object", "additionalProperties": true }
+      }
+    },
+
+    "CompilePhase": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "duration_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+
+    "Iteration": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["iteration_index"],
+      "properties": {
+        "iteration_index": { "type": "integer", "minimum": 0 },
+        "timestamp_ms": { "type": "number", "minimum": 0 },
+        "guard_evaluations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "guard_id": { "type": "string" },
+              "evaluation_result": { "type": "string" },
+              "evaluated_value": { "type": "string" }
+            }
+          }
+        },
+        "cache_hit": { "type": "boolean" },
+        "recompilation_triggered": { "type": "boolean" },
+        "output_signature": { "type": "string" },
+        "internal_state_snapshot": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "module_buffers_hash": { "type": "string" },
+            "module_attrs_changed": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    "LintFinding": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["finding_id", "pattern_category", "severity"],
+      "properties": {
+        "finding_id": { "type": "string" },
+        "pattern_category": {
+          "type": "string",
+          "enum": ["in_place_op_on_alias", "operator_non_default_param"],
+          "description": "v0 scope: Li et al. §3.2.3 (21.6%) + operator_non_default_param (~9.5%). Other patterns are post-v1.0."
+        },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "source_location": { "$ref": "#/$defs/SourceRange" },
+        "trigger_pattern": { "type": "string" },
+        "li_et_al_section": { "type": "string" },
+        "reference_issue": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "url": { "type": "string", "format": "uri" },
+            "fixed_in_version": { "type": "string" }
+          }
+        },
+        "workaround": { "type": "string" },
+        "confidence": { "type": "string" },
+        "applies_to_user_torch_version": { "type": "boolean" }
+      }
+    },
+
+    "Kernel": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kernel_id", "name"],
+      "properties": {
+        "kernel_id": { "type": "string" },
+        "name": { "type": "string" },
+        "source_path": { "type": "string" },
+        "ptx_path": { "type": "string" },
+        "kernel_source_excerpt": { "type": "string", "description": "Opt-in only; omitted by default." },
+        "launch_config": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "grid": { "type": "array", "items": { "type": "integer" }, "minItems": 3, "maxItems": 3 },
+            "block": { "type": "array", "items": { "type": "integer" }, "minItems": 3, "maxItems": 3 },
+            "shared_mem_bytes": { "type": "integer", "minimum": 0 },
+            "num_warps": { "type": "integer", "minimum": 1 },
+            "num_stages": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "occupancy_hint": { "type": "number", "minimum": 0, "maximum": 1 },
+        "features": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "flops": { "type": "number", "minimum": 0 },
+            "bytes_loaded": { "type": "number", "minimum": 0 },
+            "bytes_stored": { "type": "number", "minimum": 0 },
+            "block_size": { "type": "integer", "minimum": 0 },
+            "num_regs": { "type": "integer", "minimum": 0, "description": "Register pressure proxy (Tool 5 4th correction)." },
+            "n_spills": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "measurements": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "iterations": { "type": "integer", "minimum": 1 },
+            "mean_us": { "type": "number", "minimum": 0 },
+            "median_us": { "type": "number", "minimum": 0 },
+            "p99_us": { "type": "number", "minimum": 0 },
+            "source": { "type": "string", "enum": ["proton", "self_timed"] }
+          }
+        },
+        "autotune_history": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+      }
+    },
+
+    "RooflinePrediction": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kernel_id"],
+      "properties": {
+        "kernel_id": { "type": "string" },
+        "gpu_spec": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "name": { "type": "string" },
+            "peak_compute_tflops_bf16": { "type": "number", "minimum": 0 },
+            "peak_bw_gbps": { "type": "number", "minimum": 0 },
+            "l2_cache_mb": { "type": "number", "minimum": 0 },
+            "sm_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "arithmetic_intensity": { "type": "number", "minimum": 0 },
+        "bound_type": { "type": "string", "enum": ["memory", "compute"] },
+        "theoretical_lower_bound_us": { "type": "number", "minimum": 0, "description": "Ideal Williams roofline; reference only, not used for pruning." },
+        "empirical_predictor_us": { "type": "number", "minimum": 0, "description": "After 4 corrections; used for ranking/pruning." },
+        "measured_us": { "type": "number", "minimum": 0 },
+        "achieved_vs_predictor": { "type": "number", "minimum": 0 },
+        "corrections_applied": { "type": "array", "items": { "type": "string" } },
+        "calibration": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "pearson_correlation": { "type": "number" },
+            "spearman_correlation": { "type": "number" },
+            "calibration_verdict": { "type": "string" },
+            "n_samples": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "pruning_decision": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "mode": { "type": "string", "enum": ["safe_prune_enabled", "partial_prune", "disabled_fallback_full_sweep"] },
+            "threshold_pearson": { "type": "number" },
+            "configs_total": { "type": "integer", "minimum": 0 },
+            "configs_predicted_top_k": { "type": "integer", "minimum": 0 },
+            "configs_measured": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "verdict": { "type": "string" },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "text": { "type": "string" },
+              "evidence_link": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "SourceLocation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "file": { "type": "string", "description": "Scrubbed or relative path per redaction_policy." },
+        "line": { "type": "integer", "minimum": 0 },
+        "function": { "type": "string" }
+      }
+    },
+
+    "SourceRange": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "file": { "type": "string" },
+        "line_start": { "type": "integer", "minimum": 0 },
+        "line_end": { "type": "integer", "minimum": 0 },
+        "code_excerpt": { "type": "string", "description": "Opt-in only." }
+      }
+    }
+  }
+}
