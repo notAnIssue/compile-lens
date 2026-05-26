@@ -1,0 +1,189 @@
+{
+  "schema_version": "0.5.0",
+  "session": {
+    "id": "b3f1c2d4-5e6a-4b7c-8d9e-0f1a2b3c4d5e",
+    "timestamp": "2026-05-21T10:30:00Z",
+    "torch_version": "2.6.0",
+    "triton_version": "3.1.0",
+    "cuda_version": "12.4",
+    "python_version": "3.11.5",
+    "gpu_name": "NVIDIA H100 80GB HBM3",
+    "host": "<redacted>",
+    "command": "<redacted>",
+    "duration_ms": 45230,
+    "iteration_count": 10,
+    "git_sha": "deadbeef1234",
+    "workspace_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "rank": 0,
+    "world_size": 1,
+    "redaction_policy": "default-strict",
+    "collector_versions": {
+      "recompile": "0.5.0",
+      "kernel": "0.5.0"
+    },
+    "compile_config": {
+      "fullgraph": false,
+      "dynamic": null,
+      "backend": "inductor",
+      "mode": "default",
+      "options": {}
+    },
+    "env_snapshot": {
+      "relevant_env_vars": {
+        "TORCHINDUCTOR_CACHE_DIR": "<redacted>",
+        "TORCH_LOGS": "+recompiles",
+        "TORCHDYNAMO_VERBOSE": "0"
+      },
+      "random_seed": 42
+    }
+  },
+  "graph_breaks": [
+    {
+      "break_id": "gb_001",
+      "location": { "file": "model/encoder.py", "line": 42, "function": "forward" },
+      "reason": "unsupported operator",
+      "op_or_construct": "torch.fft.fft",
+      "fallback_kind": "graph_break"
+    }
+  ],
+  "recompilations": [
+    {
+      "recompilation_id": "rec_001",
+      "compiled_function_id": "fn_001",
+      "trigger_reason": "guard_failure",
+      "failed_guard": {
+        "guard_id": "g_001",
+        "expression": "self.batch_size == 32",
+        "previous_value": "32",
+        "new_value": "24"
+      },
+      "occurred_at_step": 1000,
+      "wall_clock_ms": 234
+    }
+  ],
+  "compiled_graphs": [
+    {
+      "graph_id": "graph_001",
+      "compiled_function_id": "fn_001",
+      "fx_graph_path": "<scrubbed>",
+      "inductor_ir_path": "<scrubbed>",
+      "guard_list": ["g_001", "g_002"],
+      "kernel_ids": ["k_001"],
+      "compile_phases_summary": { "total_ms": 45230 }
+    }
+  ],
+  "compile_phases": [
+    { "name": "dynamo", "duration_ms": 1200.5 },
+    { "name": "inductor", "duration_ms": 8400.0 }
+  ],
+  "iterations": [
+    {
+      "iteration_index": 0,
+      "timestamp_ms": 100,
+      "guard_evaluations": [
+        { "guard_id": "g_001", "evaluation_result": "pass", "evaluated_value": "32" }
+      ],
+      "cache_hit": true,
+      "recompilation_triggered": false,
+      "output_signature": "sha256:abc",
+      "internal_state_snapshot": {
+        "module_buffers_hash": "sha256:def",
+        "module_attrs_changed": ["self.value"]
+      }
+    }
+  ],
+  "lint_findings": [
+    {
+      "finding_id": "lf_001",
+      "pattern_category": "in_place_op_on_alias",
+      "severity": "high",
+      "source_location": {
+        "file": "model/encoder.py",
+        "line_start": 47,
+        "line_end": 49,
+        "code_excerpt": "<opt-in only>"
+      },
+      "trigger_pattern": "expand_then_indexed_assign",
+      "li_et_al_section": "§3.2.3",
+      "reference_issue": {
+        "url": "https://github.com/pytorch/pytorch/issues/114302",
+        "fixed_in_version": "2.5"
+      },
+      "workaround": "y = x.expand(...).clone()",
+      "confidence": "ast_exact_match",
+      "applies_to_user_torch_version": true
+    }
+  ],
+  "kernels": [
+    {
+      "kernel_id": "k_001",
+      "name": "fused_attention_qkv",
+      "source_path": "<scrubbed>",
+      "ptx_path": "<scrubbed>",
+      "kernel_source_excerpt": "<opt-in only>",
+      "launch_config": {
+        "grid": [128, 1, 1],
+        "block": [256, 1, 1],
+        "shared_mem_bytes": 16384,
+        "num_warps": 4,
+        "num_stages": 2
+      },
+      "occupancy_hint": 0.75,
+      "features": {
+        "flops": 12000000000,
+        "bytes_loaded": 840000000,
+        "bytes_stored": 420000000,
+        "block_size": 128,
+        "num_regs": 168,
+        "n_spills": 0
+      },
+      "measurements": {
+        "iterations": 50,
+        "mean_us": 412.3,
+        "median_us": 410.8,
+        "p99_us": 425.1,
+        "source": "proton"
+      },
+      "autotune_history": []
+    }
+  ],
+  "roofline_predictions": [
+    {
+      "kernel_id": "k_001",
+      "gpu_spec": {
+        "name": "H100",
+        "peak_compute_tflops_bf16": 989,
+        "peak_bw_gbps": 3350,
+        "l2_cache_mb": 60,
+        "sm_count": 132
+      },
+      "arithmetic_intensity": 9.52,
+      "bound_type": "memory",
+      "theoretical_lower_bound_us": 312.1,
+      "empirical_predictor_us": 389.4,
+      "measured_us": 412.3,
+      "achieved_vs_predictor": 0.94,
+      "corrections_applied": ["block_size", "occupancy", "launch_overhead", "register_pressure"],
+      "calibration": {
+        "pearson_correlation": 0.82,
+        "spearman_correlation": 0.79,
+        "calibration_verdict": "reliable",
+        "n_samples": 24
+      },
+      "pruning_decision": {
+        "mode": "safe_prune_enabled",
+        "threshold_pearson": 0.8,
+        "configs_total": 24,
+        "configs_predicted_top_k": 5,
+        "configs_measured": 5
+      },
+      "verdict": "memory_bound_well_tuned",
+      "suggestions": [
+        {
+          "text": "Reduce HBM traffic via upstream layer_norm fusion",
+          "evidence_link": "kernel_id=k_002 (upstream layer_norm), shared input tensor t_017"
+        }
+      ]
+    }
+  ]
+}
