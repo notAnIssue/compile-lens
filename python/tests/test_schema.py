@@ -13,7 +13,6 @@ import pytest
 from pydantic import ValidationError
 
 from compile_lens._schema import (
-    ClsArtifact,
     RedactionPolicy,
     from_json,
     to_json,
