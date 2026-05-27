@@ -1,0 +1,13 @@
+[package]
+name = "cls-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "cl"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
