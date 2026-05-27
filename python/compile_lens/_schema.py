@@ -32,7 +32,7 @@ Representation conventions (mirroring the Rust side):
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -50,7 +50,7 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-class RedactionPolicy(str, Enum):
+class RedactionPolicy(StrEnum):
     """Redaction classification (D11). Closed + fail-closed: an unknown wire value raises
     ``ValidationError`` rather than silently defaulting to a more permissive policy."""
 
