@@ -6,3 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+cls-errors = { path = "../cls-errors" }
+cls-schema = { path = "../cls-schema" }
+serde_json = { workspace = true }

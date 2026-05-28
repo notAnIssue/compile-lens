@@ -28,6 +28,20 @@ enum Command {
         /// Path to read.
         path: std::path::PathBuf,
     },
+
+    /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
+    /// migration ladder yet: matching the current schema -> byte-copy; otherwise
+    /// the migration is refused (CLS-E0003) and the user re-collects.
+    Migrate {
+        /// Artifact to read.
+        input: std::path::PathBuf,
+        /// Write the migrated artifact here.
+        #[arg(short, long)]
+        output: Option<std::path::PathBuf>,
+        /// Report what would change without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 fn main() -> miette::Result<()> {
@@ -42,6 +56,22 @@ fn main() -> miette::Result<()> {
             })?;
             println!("collected (placeholder) — {}", path.display());
             Ok(())
+        }
+        Some(Command::Migrate { input, output, dry_run }) => {
+            if dry_run {
+                let version = cls_schema_migrate::detect_schema_version(&input)?;
+                println!("no changes (artifact is already at schema {version})");
+                Ok(())
+            } else if let Some(out) = output {
+                cls_schema_migrate::migrate_to_current(&input, &out)?;
+                println!("migrated {} -> {}", input.display(), out.display());
+                Ok(())
+            } else {
+                Err(ClsError::InvalidCliArgs {
+                    detail: "either --output <path> or --dry-run is required".into(),
+                }
+                .into())
+            }
         }
         None => Ok(()),
     }
