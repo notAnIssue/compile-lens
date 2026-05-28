@@ -6,3 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+miette = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
