@@ -7,9 +7,8 @@
 //! mirror [`schema/v0.5.0.json`] 1:1.
 //!
 //! See ADR-021 for the *layout* decision (semantic-domain hybrid; nest objects, flatten
-//! scalars; normalized top-level arrays) and the colibri-side design note
-//! `assets/notes/compile-lens/implementation/phase00/cls_schema_rust_design.md` for the
-//! *serde-representation* rationale.
+//! scalars; normalized top-level arrays). The serde-representation rationale lives in the
+//! per-decision comments below.
 //!
 //! # Representation conventions
 //!
