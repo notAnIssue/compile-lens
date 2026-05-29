@@ -3,11 +3,11 @@
 - **Status**: Accepted
 - **Date**: 2026-05-27
 - **Deciders**: project maintainer
-- **Related**: ADR-021 (schema layout). Implemented in the `cls-schema` crate (S0.6, serde) and `python/compile_lens/_schema.py` (S0.7, pydantic); guarded by `test_unknown_field_handled` in both. Discussion layer (colibri): `cls_schema_rust_design.md` §DR4 + `cls_schema_python_design.md` §PR-4.
+- **Related**: ADR-021 (schema layout). Implemented in the `cls-schema` crate (S0.6, serde) and `python/compile_lens/_schema.py` (S0.7, pydantic); guarded by `test_unknown_field_handled` in both.
 
-> Numbered 027 (not 022) by deliberate choice: the phase todos pre-reserve 022–026 for
-> planned section ADRs (error handling, recompile migration, Tool 2, hero form). This ADR
-> emerged out of plan during S0.6/S0.7, so it takes the next slot past the reserved block.
+> Numbered 027 (not 022) by deliberate choice: 022–026 are reserved for planned section
+> ADRs (error handling, recompile migration, Tool 2, hero form). This ADR emerged out of
+> plan during S0.6/S0.7, so it takes the next slot past the reserved block.
 
 ## Context
 
