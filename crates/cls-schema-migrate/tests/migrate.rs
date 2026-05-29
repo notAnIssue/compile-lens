@@ -19,7 +19,11 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn tempfile_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("cls-schema-migrate-{}-{}", std::process::id(), name))
+    std::env::temp_dir().join(format!(
+        "cls-schema-migrate-{}-{}",
+        std::process::id(),
+        name
+    ))
 }
 
 // ── test_detect_current_schema ─────────────────────────────────────────────────────────
@@ -110,5 +114,8 @@ fn test_migrate_to_current_refuses_unknown_before_writing() {
 
     assert!(matches!(err, ClsError::SchemaVersionMismatch { .. }));
     // And the output file must NOT have been written — refusal happens before any IO.
-    assert!(!out.exists(), "output should not be created on detection failure");
+    assert!(
+        !out.exists(),
+        "output should not be created on detection failure"
+    );
 }

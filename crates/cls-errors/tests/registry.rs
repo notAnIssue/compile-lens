@@ -50,19 +50,33 @@ fn all_variants() -> Vec<ClsError> {
 }
 
 const EXPECTED_CODES: &[&str] = &[
-    "CLS-E0001", "CLS-E0002", "CLS-E0003", "CLS-E0004", "CLS-E0005",
-    "CLS-E0006", "CLS-E0007", "CLS-E0008", "CLS-E0009", "CLS-E0010",
+    "CLS-E0001",
+    "CLS-E0002",
+    "CLS-E0003",
+    "CLS-E0004",
+    "CLS-E0005",
+    "CLS-E0006",
+    "CLS-E0007",
+    "CLS-E0008",
+    "CLS-E0009",
+    "CLS-E0010",
 ];
 
 // ── test_each_variant_has_stable_code ───────────────────────────────────────────────────
 #[test]
 fn test_each_variant_has_stable_code() {
     let errs = all_variants();
-    assert_eq!(errs.len(), EXPECTED_CODES.len(), "must construct every variant");
+    assert_eq!(
+        errs.len(),
+        EXPECTED_CODES.len(),
+        "must construct every variant"
+    );
     for (err, expected) in errs.iter().zip(EXPECTED_CODES.iter()) {
         assert_eq!(err.code(), *expected, "inherent code mismatch");
         // The miette-derive code must agree with the inherent match — catches drift.
-        let derived = Diagnostic::code(err).expect("derive must produce a code").to_string();
+        let derived = Diagnostic::code(err)
+            .expect("derive must produce a code")
+            .to_string();
         assert_eq!(derived, *expected, "miette-derive code mismatch");
     }
 }
@@ -82,7 +96,10 @@ fn test_each_variant_renders_code_and_help() {
             .to_string();
         assert!(!help.is_empty(), "{code} help is empty");
         // doc URL is intentionally absent until a doc site exists.
-        assert!(Diagnostic::url(&err).is_none(), "{code} unexpectedly carries a URL");
+        assert!(
+            Diagnostic::url(&err).is_none(),
+            "{code} unexpectedly carries a URL"
+        );
     }
 }
 
@@ -95,7 +112,10 @@ fn test_cls_e0001_io_error() {
     };
     assert_eq!(err.code(), "CLS-E0001");
     let display = format!("{err}");
-    assert!(display.contains("/nonexistent"), "display omits path: {display}");
+    assert!(
+        display.contains("/nonexistent"),
+        "display omits path: {display}"
+    );
 }
 
 // ── test_cls_e0008_sensitive_path_refuses_record ───────────────────────────────────────
@@ -106,7 +126,10 @@ fn test_cls_e0008_sensitive_path_refuses_record() {
     };
     assert_eq!(err.code(), "CLS-E0008");
     let help = Diagnostic::help(&err).unwrap().to_string();
-    assert!(help.contains(".ssh"), "help should mention the refused dirs: {help}");
+    assert!(
+        help.contains(".ssh"),
+        "help should mention the refused dirs: {help}"
+    );
 }
 
 // ── test_cls_e0009_demotion_refused ────────────────────────────────────────────────────
@@ -136,8 +159,6 @@ fn test_cause_chain_through_source() {
     assert!(cause.to_string().contains("denied"), "cause lost: {cause}");
 
     // pure variants (no #[source]) return None — call sites won't see a phantom chain.
-    let pure = ClsError::InvalidCliArgs {
-        detail: "x".into(),
-    };
+    let pure = ClsError::InvalidCliArgs { detail: "x".into() };
     assert!(std::error::Error::source(&pure).is_none());
 }
