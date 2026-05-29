@@ -153,6 +153,7 @@ version = "0.5.0"
 dependencies = [
  "clap",
  "cls-errors",
+ "cls-schema-migrate",
  "miette",
 ]
 
@@ -201,6 +202,11 @@ dependencies = [
 [[package]]
 name = "cls-schema-migrate"
 version = "0.5.0"
+dependencies = [
+ "cls-errors",
+ "cls-schema",
+ "serde_json",
+]
 
 [[package]]
 name = "cls-scrub"
