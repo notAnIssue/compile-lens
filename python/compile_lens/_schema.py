@@ -3,11 +3,8 @@
 This is the **Python half** of the cross-language contract; the Rust half is the
 ``cls-schema`` crate (S0.6). The two must produce/consume identical JSON so the
 round-trip test (S0.10: Python writes -> Rust reads -> consistent, and reverse) passes.
-These models mirror ``schema/v0.5.0.json`` and ``crates/cls-schema/src/*.rs`` 1:1.
-
-See the colibri design note
-``assets/notes/compile-lens/implementation/phase00/cls_schema_python_design.md`` for the
-rationale; it maps each decision back to the Rust note's DR1-DR8.
+These models mirror ``schema/v0.5.0.json`` and ``crates/cls-schema/src/*.rs`` 1:1; the
+per-decision rationale lives in the comments below.
 
 Representation conventions (mirroring the Rust side):
 
