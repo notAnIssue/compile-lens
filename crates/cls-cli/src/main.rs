@@ -57,7 +57,11 @@ fn main() -> miette::Result<()> {
             println!("collected (placeholder) — {}", path.display());
             Ok(())
         }
-        Some(Command::Migrate { input, output, dry_run }) => {
+        Some(Command::Migrate {
+            input,
+            output,
+            dry_run,
+        }) => {
             if dry_run {
                 let version = cls_schema_migrate::detect_schema_version(&input)?;
                 println!("no changes (artifact is already at schema {version})");
