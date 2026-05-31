@@ -1,0 +1,62 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.5.0-alpha.0] — 2026-05-31
+
+First tagged release. Phase 0 (architectural scaffold) closeout — there is no
+user-visible toolkit yet, only the foundation that the v0.5.0 MVP will land on
+top of (Tool 1 recompile aggregator, Tool 2a compile diff, Hero `cl.session()`).
+
+### Added
+
+- **Schema v0.5.0** — JSON Schema (`schema/v0.5.0.json`), Rust serde bindings
+  (`cls-schema` crate), Python pydantic models (`compile_lens._schema`). The
+  `.cls.json` artifact is the sole cross-language contract.
+- **Cross-language round-trip test** — Python writes → Rust reads → identical
+  (and reverse); per-test byte-equality plus a determinism job that runs the
+  whole suite twice at job level.
+- **`cls-cli` (`cl`) binary** — `--version`, `cl collect <path>` (skeleton that
+  exercises the error pipeline), `cl migrate <input> --output <out> | --dry-run`.
+- **`cls-errors` crate** — 10 variants with stable codes (`CLS-E0001`..`E0010`)
+  using `thiserror` + `miette` 4-part rendering (code + message + cause chain +
+  help). ADR-022 documents the choice via a weighted matrix.
+- **`cls-schema-migrate` crate** — detect-and-refuse migration skeleton. Pre-V1
+  there is no migration ladder; matching the current schema is a byte-copy,
+  everything else is refused (CLS-E0003) and the user re-collects.
+- **Forward-compatible unknown-field capture** (ADR-027) — `ClsArtifact` and
+  `Session` preserve unknown keys through a read/write cycle, every other type
+  drops them. Paired `test_unknown_field_handled` on both language sides.
+- **Tracing** — `tracing_subscriber` in `cls-cli` and `structlog` in the Python
+  front-end, both configured by `CLS_LOG` (verbosity) / `CLS_LOG_FORMAT=json`
+  (formatter); the Python side additionally accepts `CLS_DEBUG=1` as a force-
+  debug shortcut.
+- **CI** — per-PR matrix on Linux + macOS: `fmt + clippy`, `ruff + mypy`,
+  `pytest` × Python 3.11/3.12 + Rust unit tests, determinism (round-trip ×2),
+  migration (byte-copy + dry-run), tracing env-var contract. Weekly
+  `cargo-audit` + `pip-audit` + dependabot for cargo / pip / github-actions.
+- **Pre-commit hooks** mirroring the CI gates: trailing-whitespace,
+  end-of-file-fixer, YAML/JSON/TOML well-formedness, merge-conflict markers,
+  500 KB file-size ceiling, `ruff --fix` + `ruff-format`, `cargo fmt` and
+  `cargo clippy -D warnings`.
+- **GitHub tooling** — PR template carrying the 8-item engineering checklist
+  (D7 algorithm / D8 error UX / D9 observability / D10 migration / D11 security
+  / CI / API stability / perf); bug + feature issue templates; security and
+  Discussions contact links.
+- **Security docs** — `SECURITY.md`, threat model, redaction policy.
+
+### Deferred to later phases (explicit)
+
+- The torch matrix axis on CI (no `torch.compile` collector touches torch yet).
+- A GPU smoke CI job (no GPU runner; smoke tests live locally for now).
+- The nightly full matrix (no surface that would benefit from it pre-Phase 1).
+- A typed schema migration ladder (kept as detect-and-refuse until V1, per the
+  pre-V1 D10 exception in the design doc).
+
+[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.0...HEAD
+[0.5.0-alpha.0]: https://github.com/notAnIssue/compile-lens/releases/tag/v0.5.0-alpha.0

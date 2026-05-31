@@ -1,4 +1,4 @@
-"""Cross-language schema round-trip tests (S0.10).
+"""Cross-language schema round-trip tests.
 
 Proves the Rust (serde, `cls-schema`) and Python (pydantic, `compile_lens._schema`)
 bindings agree on schema v0.5.0: an artifact survives Python -> Rust -> Python (and the

@@ -1,8 +1,8 @@
 """Pydantic v2 models for the compile-lens ``.cls.json`` session artifact (schema v0.5.0).
 
 This is the **Python half** of the cross-language contract; the Rust half is the
-``cls-schema`` crate (S0.6). The two must produce/consume identical JSON so the
-round-trip test (S0.10: Python writes -> Rust reads -> consistent, and reverse) passes.
+``cls-schema`` crate. The two must produce/consume identical JSON so the cross-language
+round-trip test (Python writes -> Rust reads -> consistent, and reverse) passes.
 These models mirror ``schema/v0.5.0.json`` and ``crates/cls-schema/src/*.rs`` 1:1; the
 per-decision rationale lives in the comments below.
 
@@ -308,6 +308,6 @@ def to_json(artifact: ClsArtifact) -> str:
 
     Uses ``exclude_unset=True`` so the output mirrors serde's behavior: keys that were
     absent in the parsed input stay absent, while a present ``null`` (e.g. ``dynamic``)
-    is preserved. This is the faithful round-trip path the Rust side reads back (S0.10).
+    is preserved. This is the faithful round-trip path the Rust side reads back.
     """
     return artifact.model_dump_json(exclude_unset=True)

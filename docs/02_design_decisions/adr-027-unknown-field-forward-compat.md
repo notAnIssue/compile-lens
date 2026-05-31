@@ -3,11 +3,11 @@
 - **Status**: Accepted
 - **Date**: 2026-05-27
 - **Deciders**: project maintainer
-- **Related**: ADR-021 (schema layout). Implemented in the `cls-schema` crate (S0.6, serde) and `python/compile_lens/_schema.py` (S0.7, pydantic); guarded by `test_unknown_field_handled` in both.
+- **Related**: ADR-021 (schema layout). Implemented in the `cls-schema` crate (serde) and `python/compile_lens/_schema.py` (pydantic); guarded by `test_unknown_field_handled` in both.
 
 > Numbered 027 (not 022) by deliberate choice: 022–026 are reserved for planned section
 > ADRs (error handling, recompile migration, Tool 2, hero form). This ADR emerged out of
-> plan during S0.6/S0.7, so it takes the next slot past the reserved block.
+> plan during the initial schema bindings work, so it takes the next slot past the reserved block.
 
 ## Context
 
@@ -20,7 +20,7 @@ arrays). A deployed binding will therefore routinely meet keys its struct/model 
 declare.
 
 Two questions follow, and they must be answered the **same way in both languages**, because
-the round-trip test (S0.10) requires Rust and Python to agree byte-for-byte:
+the cross-language round-trip test requires Rust and Python to agree byte-for-byte:
 
 1. When a binding meets an unknown key, does it **preserve** it through a read → write
    cycle, or **drop** it?
@@ -92,7 +92,7 @@ contribution = `weight × (raw/10)`.
 | Criterion (weight) — why this weight | A everywhere | B nowhere | C growth-points ✅ |
 |---|---|---|---|
 | **Forward-compat fidelity at growth points (3.0)** — the reason to capture at all; D6 says session/top-level grow | 10 (3.00) | 2 (0.60) | **9 (2.70)** |
-| **Cross-language consistency / round-trip safety (2.5)** — Rust and Python must drop/keep on the same line or S0.10 diverges | 8 (2.00) | 8 (2.00) | **9 (2.25)** |
+| **Cross-language consistency / round-trip safety (2.5)** — Rust and Python must drop/keep on the same line or the round-trip suite diverges | 8 (2.00) | 8 (2.00) | **9 (2.25)** |
 | **Simplicity / low maintenance (1.5)** — catch-all field count, cognitive load | 2 (0.30) | 10 (1.50) | **8 (1.20)** |
 | **YAGNI — no speculative deep retention (1.5)** — analyzers don't round-trip deep input | 2 (0.30) | 9 (1.35) | **9 (1.35)** |
 | **Implementable cleanly in serde + pydantic (1.5)** | 7 (1.05) | 10 (1.50) | **9 (1.35)** |

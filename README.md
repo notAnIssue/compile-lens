@@ -1,6 +1,6 @@
 # compile-lens
 
-<!-- demo-gif-placeholder: a 10-15s screencast lands here at v0.5.0 ship (see S7.X). -->
+<!-- demo-gif-placeholder: a 10-15s screencast lands here at v0.5.0 ship. -->
 
 > **compile-lens — a diagnostic suite for `torch.compile` production observability (Python + Rust), turning PyTorch's official tracing evidence into workflow-ready insights for recompile/regression/divergence/lint/kernel triage.**
 
@@ -51,7 +51,7 @@ The framing is grounded in *Li et al. 2026* on `torch.compile` bug taxonomy: `to
 
 ## Install
 
-> **Pre-alpha — installation will be wired up in S0.13.** The commands below are the target shape; they are not expected to work yet.
+> **Pre-alpha.** The source install works today (the Phase 0 scaffold is complete as of `v0.5.0-alpha.0`); the PyPI wheel lands with the v0.5.0 MVP.
 
 ```bash
 # From PyPI (planned)
