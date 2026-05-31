@@ -88,3 +88,28 @@ jobs:
       - name: dry-run reports current schema version
         run: |
           cargo run -q -p cls-cli -- migrate schema/examples/full.cls.json --dry-run | grep -q "0.5.0"
+
+  tracing:
+    name: Tracing (CLS_LOG / CLS_LOG_FORMAT contract)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build cls-cli
+        run: cargo build -q -p cls-cli
+      - name: default level is silent (no DEBUG events leak)
+        run: |
+          out=$(./target/debug/cl --version 2>&1)
+          if echo "$out" | grep -q DEBUG; then
+            echo "ERROR: DEBUG event at default (warn) level"; echo "$out"; exit 1
+          fi
+      - name: CLS_LOG=debug surfaces DEBUG events
+        env:
+          CLS_LOG: debug
+        run: ./target/debug/cl --version 2>&1 | grep -q DEBUG
+      - name: CLS_LOG_FORMAT=json + CLS_LOG=info emits a JSON-shaped event
+        env:
+          CLS_LOG: info
+          CLS_LOG_FORMAT: json
+        run: ./target/debug/cl --version 2>&1 | grep -q '"level":"INFO"'
