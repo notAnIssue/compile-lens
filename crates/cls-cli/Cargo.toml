@@ -14,3 +14,5 @@ clap = { workspace = true }
 cls-errors = { path = "../cls-errors" }
 cls-schema-migrate = { path = "../cls-schema-migrate" }
 miette = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
