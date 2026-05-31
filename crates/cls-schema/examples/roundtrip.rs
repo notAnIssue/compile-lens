@@ -1,4 +1,4 @@
-//! Cross-language round-trip harness for the schema contract test (S0.10).
+//! Cross-language round-trip harness for the schema contract test.
 //!
 //! Reads a `.cls.json`, deserializes it into [`cls_schema::ClsArtifact`], re-serializes,
 //! and writes the result. Used by `tests/integration/test_schema_round_trip.py` to prove

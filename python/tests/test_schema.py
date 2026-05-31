@@ -1,4 +1,4 @@
-"""Tests for compile_lens._schema (S0.7).
+"""Tests for compile_lens._schema.
 
 Loads the SAME canonical artifacts shipped in schema/examples/ that the Rust crate's
 tests use, so the two language bindings can't silently drift from the JSON Schema.
@@ -77,7 +77,7 @@ def test_round_trip_python() -> None:
         dumped = to_json(obj1)
         obj2 = from_json(dumped)
         assert obj1 == obj2
-        # re-dump is byte-identical (the determinism S0.10 relies on)
+        # re-dump is byte-identical (the determinism the round-trip suite relies on)
         assert dumped == to_json(obj2)
 
     # present-null union fields survive the round trip; absent ones stay absent
