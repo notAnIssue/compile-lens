@@ -109,6 +109,18 @@ Pre-alpha — external contributions are not being accepted yet. The repository 
 
 If you have found a security issue, please follow [`SECURITY.md`](./SECURITY.md) — do **not** open a public issue.
 
+### Development setup
+
+Pre-commit runs the same lints CI does, so passing it locally is the fastest gate:
+
+```bash
+pip install -e '.[dev]'
+pre-commit install        # one-time, installs the git hook
+pre-commit run --all-files
+```
+
+The hooks (see [`.pre-commit-config.yaml`](./.pre-commit-config.yaml)): trailing-whitespace / end-of-file / YAML+JSON+TOML well-formedness / merge-conflict markers / no >500 KB files / `ruff --fix` + `ruff-format` / `cargo fmt --check` / `cargo clippy -D warnings`. The Rust hooks shell out to the workspace's own toolchain, so what passes locally passes in CI.
+
 ---
 
 ## License

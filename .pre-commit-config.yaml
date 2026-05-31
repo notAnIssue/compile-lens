@@ -1,0 +1,51 @@
+# Pre-commit hooks for compile-lens. Install with:
+#   pip install pre-commit && pre-commit install
+# Run on the whole tree:
+#   pre-commit run --all-files
+#
+# Design notes:
+#   - The Rust hooks shell out to the workspace's own `cargo` (language: system).
+#     We *do not* fetch a separate clippy binary from a pre-commit mirror — the
+#     workspace already pins a Rust toolchain via `rust-toolchain.toml` (or the
+#     contributor's stable channel), and that is the toolchain the CI uses too.
+#     Anything else risks "clippy passes locally, fails in CI".
+#   - Ruff is split into lint (with --fix) and format, mirroring how CI calls it.
+#   - Hook rev pins are immutable refs; bump them via Dependabot or a manual PR.
+
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt --check
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy -D warnings
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
