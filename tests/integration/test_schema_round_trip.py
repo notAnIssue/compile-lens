@@ -27,8 +27,18 @@ CASES = ["minimal", "full"]
 def _rust_roundtrip(src: Path, dst: Path) -> None:
     """Read `src`, deserialize+reserialize through the Rust harness, write `dst`."""
     subprocess.run(
-        ["cargo", "run", "--quiet", "--package", "cls-schema",
-         "--example", "roundtrip", "--", str(src), str(dst)],
+        [
+            "cargo",
+            "run",
+            "--quiet",
+            "--package",
+            "cls-schema",
+            "--example",
+            "roundtrip",
+            "--",
+            str(src),
+            str(dst),
+        ],
         cwd=REPO_ROOT,
         check=True,
     )
