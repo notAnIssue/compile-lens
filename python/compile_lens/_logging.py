@@ -48,9 +48,7 @@ def configure_logging() -> None:
     use_json = os.environ.get("CLS_LOG_FORMAT", "").lower() == "json"
 
     final_renderer: Any = (
-        structlog.processors.JSONRenderer()
-        if use_json
-        else structlog.dev.ConsoleRenderer()
+        structlog.processors.JSONRenderer() if use_json else structlog.dev.ConsoleRenderer()
     )
 
     structlog.configure(
