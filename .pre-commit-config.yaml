@@ -49,3 +49,11 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+      - id: no-private-fingerprints
+        name: no private planning identifiers in repo files
+        entry: scripts/check_private_fingerprints.sh
+        language: system
+        # Run on every text file the developer touches; the script's own
+        # whitelist exempts the files that exist to describe the rule.
+        types: [text]
+        exclude: '^(Cargo\.lock|target/|\.git/)'

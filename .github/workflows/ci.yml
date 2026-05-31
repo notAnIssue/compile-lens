@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+# A re-push to the same branch cancels the previous in-flight run; the most
+# recent commit is the one we care about. Pushes to main are *not* cancelled
+# (the second clause keeps `cancel-in-progress` false on main).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
