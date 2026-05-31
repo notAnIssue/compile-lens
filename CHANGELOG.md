@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `CONTRIBUTING.md` capturing the naming, bundling, changelog, and ADR rules
+  that the maintainers follow (ADR-028 holds the rationale).
+- `scripts/preflight.sh` — one command runs every CI check locally; `--quick`
+  skips the integration tests for a faster inner loop.
+- `scripts/check_private_fingerprints.sh` — pre-commit hook that refuses
+  commits containing identifiers from internal planning notes (see ADR-028
+  for the exact pattern families).
+- ADR-028 — *one naming namespace, anchored in `the design doc`; private
+  identifiers CI-gated*. Closes the leak class addressed retroactively by
+  the `v0.5.0-alpha.0` cleanup PRs.
+
+### Changed
+
+- CI workflows now use `concurrency:` — a re-push to the same PR branch
+  cancels the in-flight run, saving Actions minutes during iteration. Pushes
+  to `main` still run to completion.
+- `.github/PULL_REQUEST_TEMPLATE.md` carries a per-PR changelog checkbox so
+  `CHANGELOG.md` is maintained as work lands.
+- README's *Development setup* section points at `CONTRIBUTING.md` and the
+  preflight script instead of listing hooks inline.
+
 ## [0.5.0-alpha.0] — 2026-05-31
 
 First tagged release. Phase 0 (architectural scaffold) closeout — there is no

@@ -21,6 +21,17 @@ make sure each axis was at least considered.
 - [ ] **API stability**: public API breaks carry a deprecation note in the changelog; semver is respected.
 - [ ] **Performance**: hot-path or algorithmic changes are covered by a benchmark (or explicitly justified as cold-path).
 
+## Changelog
+
+<!--
+Every PR with user-visible effect adds at least one line under [Unreleased]
+in CHANGELOG.md so the per-phase ship is a rename, not a sweep. Purely
+internal changes (test refactors, comment fixes) may skip — make the call.
+See CONTRIBUTING.md "Changelog" for the rule.
+-->
+
+- [ ] `CHANGELOG.md` updated under `[Unreleased]`, or this PR is internal-only.
+
 ## Related ADR / Issue
 
 <!--

@@ -111,15 +111,18 @@ If you have found a security issue, please follow [`SECURITY.md`](./SECURITY.md)
 
 ### Development setup
 
-Pre-commit runs the same lints CI does, so passing it locally is the fastest gate:
+One command runs every check CI runs, locally:
 
 ```bash
 pip install -e '.[dev]'
 pre-commit install        # one-time, installs the git hook
-pre-commit run --all-files
+./scripts/preflight.sh    # before each push
 ```
 
-The hooks (see [`.pre-commit-config.yaml`](./.pre-commit-config.yaml)): trailing-whitespace / end-of-file / YAML+JSON+TOML well-formedness / merge-conflict markers / no >500 KB files / `ruff --fix` + `ruff-format` / `cargo fmt --check` / `cargo clippy -D warnings`. The Rust hooks shell out to the workspace's own toolchain, so what passes locally passes in CI.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full rules — naming, branch
+conventions, bundling, changelog, and ADR cadence — and
+[ADR-028](./docs/02_design_decisions/adr-028-naming-and-delivery.md) for the
+rationale behind the one-namespace + CI-gate model.
 
 ---
 
