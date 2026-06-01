@@ -65,6 +65,29 @@ discrepancy is itself a bug — fix it in `scripts/preflight.sh` or in the
 workflow, not in the next PR's verification habit. **CI is a gate, not a
 debugger.**
 
+### Do not swallow `git commit`'s exit code
+
+Concrete trap: piping `git commit` (or any command that runs the
+pre-commit hooks) through `| tail`, `| head`, or `| grep` makes the
+pipeline exit code equal the tail / head / grep exit code, which is
+~always 0. A hook abort then looks like success on the surface, and the
+subsequent `git push` happily uploads the unchanged HEAD as a "new
+branch" — the failure only surfaces later when `gh pr create` reports
+*"No commits between main and …"*.
+
+Either avoid the pipe, set `pipefail` in the shell, or capture the exit
+code explicitly:
+
+```bash
+git commit -m "..."              # ← let it print, check exit code yourself
+git commit -m "..." || exit 1    # ← or fail-fast inline
+set -o pipefail; git commit ... | tail -3   # ← or surface the real status
+```
+
+The repo's pre-push hook (`scripts/check_branch_advances.sh`, installed
+automatically by `pre-commit install`) is the mechanical safety net for
+this: it refuses to push a branch with zero commits beyond `main`.
+
 ## Bundling units of work into PRs
 
 Implementation work breaks down into ~1–2 hour units. The default is **one

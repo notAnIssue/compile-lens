@@ -1,5 +1,7 @@
 # Pre-commit hooks for compile-lens. Install with:
 #   pip install pre-commit && pre-commit install
+# That single command installs both the pre-commit and pre-push stages
+# because of `default_install_hook_types` below.
 # Run on the whole tree:
 #   pre-commit run --all-files
 #
@@ -12,6 +14,7 @@
 #   - Ruff is split into lint (with --fix) and format, mirroring how CI calls it.
 #   - Hook rev pins are immutable refs; bump them via Dependabot or a manual PR.
 
+default_install_hook_types: [pre-commit, pre-push]
 default_language_version:
   python: python3
 
@@ -57,3 +60,12 @@ repos:
         # whitelist exempts the files that exist to describe the rule.
         types: [text]
         exclude: '^(Cargo\.lock|target/|\.git/)'
+
+      - id: branch-advances-main
+        name: branch has at least one commit beyond main
+        entry: scripts/check_branch_advances.sh
+        language: system
+        stages: [pre-push]
+        # The script reads the local repo state, not file lists.
+        pass_filenames: false
+        always_run: true

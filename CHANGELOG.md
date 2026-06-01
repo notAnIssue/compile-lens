@@ -29,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CHANGELOG.md` is maintained as work lands.
 - README's *Development setup* section points at `CONTRIBUTING.md` and the
   preflight script instead of listing hooks inline.
+- A pre-push hook (`scripts/check_branch_advances.sh`) refuses any push
+  whose branch tip equals `main`. This catches the failure mode where a
+  pre-commit hook silently aborts a commit but its non-zero exit code is
+  swallowed by a `| tail` pipe — the subsequent push uploads the unchanged
+  HEAD as a "new branch" and the failure only surfaces later in
+  `gh pr create`. `CONTRIBUTING.md` gains the matching cultural rule
+  (don't pipe `git commit` through anything that swallows its exit code).
+  `pre-commit install` covers both stages now via
+  `default_install_hook_types`.
 
 ### Documentation
 
