@@ -30,6 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README's *Development setup* section points at `CONTRIBUTING.md` and the
   preflight script instead of listing hooks inline.
 
+### Documentation
+
+- ADR-029 — *defer Tool 1 schema-field refinement to v0.6*. Phase 1's
+  schema audit found one missing field (`FailedGuard.source_location`) and
+  one nice-to-have (`FailedGuard.category`); both are deferred to the v0.6
+  bump rather than churning a `v0.5.1` mid-MVP. Tool 1 derives source
+  attribution at analyze time; the limitations are called out in the
+  forthcoming Tool 1 docs page.
+
 ## [0.5.0-alpha.0] — 2026-05-31
 
 First tagged release. Phase 0 (architectural scaffold) closeout — there is no
