@@ -1,0 +1,386 @@
+{
+  "[-/-]": {
+    "artifacts": [
+      {
+        "name": "torch_version_0.json",
+        "number": 0,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_-_-_-/torch_version_0.json"
+      }
+    ]
+  },
+  "[0/0]": {
+    "artifacts": [
+      {
+        "name": "dynamo_output_graph_1.txt",
+        "number": 1,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/dynamo_output_graph_1.txt"
+      },
+      {
+        "name": "aot_forward_graph_fw_metadata_2.txt",
+        "number": 2,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/aot_forward_graph_fw_metadata_2.txt"
+      },
+      {
+        "name": "aot_inference_graph_3.txt",
+        "number": 3,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/aot_inference_graph_3.txt"
+      },
+      {
+        "name": "fx_graph_runnable_4.txt",
+        "number": 4,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/fx_graph_runnable_4.txt"
+      },
+      {
+        "name": "inductor_post_grad_graph_5.txt",
+        "number": 5,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/inductor_post_grad_graph_5.txt"
+      },
+      {
+        "name": "inductor_output_code_cz4kpgs6qzb22v26ucnwtj4lm3ismlnyxukvoqr3t2fl323oudzr_6.html",
+        "number": 6,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/inductor_output_code_cz4kpgs6qzb22v26ucnwtj4lm3ismlnyxukvoqr3t2fl323oudzr_6.html"
+      },
+      {
+        "name": "inductor_provenance_tracking_node_mappings_7.json",
+        "number": 7,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/inductor_provenance_tracking_node_mappings_7.json"
+      },
+      {
+        "name": "inductor_provenance_tracking_kernel_stack_traces_8.json",
+        "number": 8,
+        "readable_url": "",
+        "suffix": "",
+        "url": "-_0_0_0/inductor_provenance_tracking_kernel_stack_traces_8.json"
+      },
+      {
+        "name": "fx_graph_cache_hit_9.json",
+        "number": 9,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_0_0/fx_graph_cache_hit_9.json"
+      },
+      {
+        "name": "aotautograd_cache_hit_10.json",
+        "number": 10,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_0_0/aotautograd_cache_hit_10.json"
+      },
+      {
+        "name": "dynamo_cpp_guards_str_11.txt",
+        "number": 11,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/dynamo_cpp_guards_str_11.txt"
+      },
+      {
+        "name": "compilation_metrics_12.html",
+        "number": 12,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_0_0/compilation_metrics_12.html"
+      }
+    ]
+  },
+  "[0/1]": {
+    "artifacts": [
+      {
+        "name": "recompile_reasons_13.json",
+        "number": 13,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/recompile_reasons_13.json"
+      },
+      {
+        "name": "dynamo_output_graph_14.txt",
+        "number": 14,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/dynamo_output_graph_14.txt"
+      },
+      {
+        "name": "aot_forward_graph_fw_metadata_15.txt",
+        "number": 15,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/aot_forward_graph_fw_metadata_15.txt"
+      },
+      {
+        "name": "aot_inference_graph_16.txt",
+        "number": 16,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/aot_inference_graph_16.txt"
+      },
+      {
+        "name": "fx_graph_runnable_17.txt",
+        "number": 17,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/fx_graph_runnable_17.txt"
+      },
+      {
+        "name": "inductor_post_grad_graph_18.txt",
+        "number": 18,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/inductor_post_grad_graph_18.txt"
+      },
+      {
+        "name": "inductor_output_code_cxaflol6qtibdgr5klsrcrap6pl3qqwcapgkimihm3jysp6lxspj_19.html",
+        "number": 19,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/inductor_output_code_cxaflol6qtibdgr5klsrcrap6pl3qqwcapgkimihm3jysp6lxspj_19.html"
+      },
+      {
+        "name": "inductor_provenance_tracking_node_mappings_20.json",
+        "number": 20,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/inductor_provenance_tracking_node_mappings_20.json"
+      },
+      {
+        "name": "inductor_provenance_tracking_kernel_stack_traces_21.json",
+        "number": 21,
+        "readable_url": "",
+        "suffix": "",
+        "url": "-_0_1_0/inductor_provenance_tracking_kernel_stack_traces_21.json"
+      },
+      {
+        "name": "fx_graph_cache_hit_22.json",
+        "number": 22,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_1_0/fx_graph_cache_hit_22.json"
+      },
+      {
+        "name": "aotautograd_cache_hit_23.json",
+        "number": 23,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_1_0/aotautograd_cache_hit_23.json"
+      },
+      {
+        "name": "dynamo_cpp_guards_str_24.txt",
+        "number": 24,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/dynamo_cpp_guards_str_24.txt"
+      },
+      {
+        "name": "compilation_metrics_25.html",
+        "number": 25,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_1_0/compilation_metrics_25.html"
+      }
+    ]
+  },
+  "[0/2]": {
+    "artifacts": [
+      {
+        "name": "recompile_reasons_26.json",
+        "number": 26,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/recompile_reasons_26.json"
+      },
+      {
+        "name": "dynamo_output_graph_27.txt",
+        "number": 27,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/dynamo_output_graph_27.txt"
+      },
+      {
+        "name": "aot_forward_graph_fw_metadata_28.txt",
+        "number": 28,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/aot_forward_graph_fw_metadata_28.txt"
+      },
+      {
+        "name": "aot_inference_graph_29.txt",
+        "number": 29,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/aot_inference_graph_29.txt"
+      },
+      {
+        "name": "fx_graph_runnable_30.txt",
+        "number": 30,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/fx_graph_runnable_30.txt"
+      },
+      {
+        "name": "inductor_post_grad_graph_31.txt",
+        "number": 31,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/inductor_post_grad_graph_31.txt"
+      },
+      {
+        "name": "inductor_output_code_c5ynftlgggmmvsqyviye2wzmkyxl4odygn2mzagqpee5dhxdqv3b_32.html",
+        "number": 32,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/inductor_output_code_c5ynftlgggmmvsqyviye2wzmkyxl4odygn2mzagqpee5dhxdqv3b_32.html"
+      },
+      {
+        "name": "inductor_provenance_tracking_node_mappings_33.json",
+        "number": 33,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/inductor_provenance_tracking_node_mappings_33.json"
+      },
+      {
+        "name": "inductor_provenance_tracking_kernel_stack_traces_34.json",
+        "number": 34,
+        "readable_url": "",
+        "suffix": "",
+        "url": "-_0_2_0/inductor_provenance_tracking_kernel_stack_traces_34.json"
+      },
+      {
+        "name": "fx_graph_cache_hit_35.json",
+        "number": 35,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_2_0/fx_graph_cache_hit_35.json"
+      },
+      {
+        "name": "aotautograd_cache_hit_36.json",
+        "number": 36,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_2_0/aotautograd_cache_hit_36.json"
+      },
+      {
+        "name": "dynamo_cpp_guards_str_37.txt",
+        "number": 37,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/dynamo_cpp_guards_str_37.txt"
+      },
+      {
+        "name": "compilation_metrics_38.html",
+        "number": 38,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_2_0/compilation_metrics_38.html"
+      }
+    ]
+  },
+  "[0/3]": {
+    "artifacts": [
+      {
+        "name": "recompile_reasons_39.json",
+        "number": 39,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/recompile_reasons_39.json"
+      },
+      {
+        "name": "dynamo_output_graph_40.txt",
+        "number": 40,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/dynamo_output_graph_40.txt"
+      },
+      {
+        "name": "aot_forward_graph_fw_metadata_41.txt",
+        "number": 41,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/aot_forward_graph_fw_metadata_41.txt"
+      },
+      {
+        "name": "aot_inference_graph_42.txt",
+        "number": 42,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/aot_inference_graph_42.txt"
+      },
+      {
+        "name": "fx_graph_runnable_43.txt",
+        "number": 43,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/fx_graph_runnable_43.txt"
+      },
+      {
+        "name": "inductor_post_grad_graph_44.txt",
+        "number": 44,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/inductor_post_grad_graph_44.txt"
+      },
+      {
+        "name": "inductor_output_code_ci2r4cqngkiyngwgame7nog444xs7lj4s4b5jpmprsq3lqrvr7kc_45.html",
+        "number": 45,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/inductor_output_code_ci2r4cqngkiyngwgame7nog444xs7lj4s4b5jpmprsq3lqrvr7kc_45.html"
+      },
+      {
+        "name": "inductor_provenance_tracking_node_mappings_46.json",
+        "number": 46,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/inductor_provenance_tracking_node_mappings_46.json"
+      },
+      {
+        "name": "inductor_provenance_tracking_kernel_stack_traces_47.json",
+        "number": 47,
+        "readable_url": "",
+        "suffix": "",
+        "url": "-_0_3_0/inductor_provenance_tracking_kernel_stack_traces_47.json"
+      },
+      {
+        "name": "fx_graph_cache_hit_48.json",
+        "number": 48,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_3_0/fx_graph_cache_hit_48.json"
+      },
+      {
+        "name": "aotautograd_cache_hit_49.json",
+        "number": 49,
+        "readable_url": null,
+        "suffix": "✅",
+        "url": "-_0_3_0/aotautograd_cache_hit_49.json"
+      },
+      {
+        "name": "dynamo_cpp_guards_str_50.txt",
+        "number": 50,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/dynamo_cpp_guards_str_50.txt"
+      },
+      {
+        "name": "compilation_metrics_51.html",
+        "number": 51,
+        "readable_url": null,
+        "suffix": "",
+        "url": "-_0_3_0/compilation_metrics_51.html"
+      }
+    ]
+  }
+}

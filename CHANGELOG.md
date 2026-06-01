@@ -39,6 +39,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attribution at analyze time; the limitations are called out in the
   forthcoming Tool 1 docs page.
 
+### Tests
+
+- `tests/fixtures/recompile/` — corpus for the Tool 1 test suite. Five real
+  PyTorch session captures (`simple_batch_size.log`, `mixed_guards.log`,
+  `large_storm.log`, `tlparse_output/`, `dynamo_explain_output.json`),
+  each paired with an `*.expected.json` oracle of the analyzer outcome it
+  is meant to drive. `_generate.py` is the source of truth and
+  regenerates the fixtures from `torch == 2.12.0+cpu` + `tlparse == 0.4.3`.
+  Absolute paths, ISO timestamps, and PIDs are scrubbed so the fixtures
+  diff byte-clean across machines.
+
 ## [0.5.0-alpha.0] — 2026-05-31
 
 First tagged release. Phase 0 (architectural scaffold) closeout — there is no

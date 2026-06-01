@@ -1,0 +1,34 @@
+{
+  "_comment": "Oracle for the mixed_guards scenario. Four calls to one @torch.compile-d function: (8,4), (16,4), (16,4)/float64, (16,8).t(). Each call after the first breaks a different guard family (size, dtype, stride). Tool 1's analyzer is expected to produce three distinct clusters, one per category, with the right attribution and category-appropriate suggestions.",
+  "scenario": "mixed_guards",
+  "expected_recompile_count": 3,
+  "expected_clusters": [
+    {
+      "category": "shape",
+      "guard_template": "L['x'].size()[<dim>] == <int>",
+      "expected_attribution": {
+        "function": "f",
+        "file_suffix": "tests/fixtures/recompile/_generate.py"
+      },
+      "expected_suggestion_keywords": ["mark_dynamic", "dynamic=True"]
+    },
+    {
+      "category": "dtype",
+      "guard_template": "L['x'].dtype == <dtype>",
+      "expected_attribution": {
+        "function": "f",
+        "file_suffix": "tests/fixtures/recompile/_generate.py"
+      },
+      "expected_suggestion_keywords": ["dtype", "cast"]
+    },
+    {
+      "category": "stride",
+      "guard_template_contains": ["stride", "contiguous"],
+      "expected_attribution": {
+        "function": "f",
+        "file_suffix": "tests/fixtures/recompile/_generate.py"
+      },
+      "expected_suggestion_keywords": ["contiguous", ".contiguous()"]
+    }
+  ]
+}
