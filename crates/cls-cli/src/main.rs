@@ -19,8 +19,9 @@
 //! - `CLS_LOG_FORMAT=json` — emit one JSON object per event (opt-in). Anything else
 //!   (incl. unset) gives the default human-readable formatter.
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use cls_errors::ClsError;
+use std::process;
 use tracing_subscriber::EnvFilter;
 
 /// torch.compile production diagnostics.
@@ -33,11 +34,54 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Collect a `.cls.json` session artifact (Phase 1; v0.5.0 is a placeholder
-    /// that verifies the input path is readable so the error pipeline is exercised).
+    /// Collect a `.cls.json` session artifact. The mode flags
+    /// (`--from-logs` / `--from-tlparse` / `--from-dynamo-explain`) are
+    /// mutually exclusive and one is required. The collectors themselves
+    /// land in the upcoming Tool 1 PRs; right now the subcommand parses
+    /// arguments, verifies the input path is reachable when applicable,
+    /// and exits with the typed `NotYetImplemented` error.
     Collect {
-        /// Path to read.
-        path: std::path::PathBuf,
+        /// Mode A — parse a `TORCH_LOGS=+recompiles` capture from a file.
+        #[arg(long, value_name = "PATH", group = "mode")]
+        from_logs: Option<std::path::PathBuf>,
+
+        /// Mode B — read `tlparse` output from a directory.
+        #[arg(long, value_name = "DIR", group = "mode")]
+        from_tlparse: Option<std::path::PathBuf>,
+
+        /// Mode C — invoke `torch._dynamo.explain` against the workload.
+        /// (Programmatic; no path argument.)
+        #[arg(long, group = "mode")]
+        from_dynamo_explain: bool,
+
+        /// Where to write the collected `.cls.json` session artifact.
+        #[arg(short, long, value_name = "PATH")]
+        output: std::path::PathBuf,
+
+        /// Iteration count placeholder for Phase 2 (sliding-window collection).
+        /// Ignored in Phase 1 but accepted so scripts written against the v0.6
+        /// surface don't fail arg parse.
+        #[arg(long, value_name = "N", default_value_t = 1)]
+        iterations: u64,
+
+        /// Redaction level applied at capture time.
+        #[arg(long, value_enum, default_value_t = RedactionLevel::DefaultStrict)]
+        redaction: RedactionLevel,
+    },
+
+    /// Render the Tool 1 recompile aggregator's analysis of a collected
+    /// session into a human- or machine-readable report. The analyzer
+    /// itself lands in upcoming Phase 1 PRs; right now the subcommand
+    /// parses arguments and exits with `NotYetImplemented`.
+    RecompileSummary {
+        /// The `.cls.json` artifact to analyze.
+        session: std::path::PathBuf,
+
+        /// Output format. `markdown` is the default human-readable shape;
+        /// `json` is machine-readable; `text` is plain console output for
+        /// terminals that can't render Markdown.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
     },
 
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
@@ -53,6 +97,29 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+}
+
+/// Redaction-policy level for `cl collect --redaction`. Mirrors the schema's
+/// `RedactionPolicy` enum (`default-strict` / `internal` / `confidential` /
+/// `public-safe`) so CLI input round-trips to the artifact unchanged.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum RedactionLevel {
+    #[value(name = "default-strict")]
+    DefaultStrict,
+    #[value(name = "internal")]
+    Internal,
+    #[value(name = "confidential")]
+    Confidential,
+    #[value(name = "public-safe")]
+    PublicSafe,
+}
+
+/// Output format for `cl recompile-summary --format`.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum SummaryFormat {
+    Markdown,
+    Json,
+    Text,
 }
 
 /// Install a global tracing subscriber from `CLS_LOG` / `CLS_LOG_FORMAT`.
@@ -78,7 +145,7 @@ fn init_tracing() {
     }
 }
 
-fn main() -> miette::Result<()> {
+fn main() {
     init_tracing();
     // Two startup events at different levels so the env-var contract is observable from
     // outside without any subcommand running: `CLS_LOG=debug cl --version` surfaces the
@@ -90,37 +157,129 @@ fn main() -> miette::Result<()> {
     );
 
     let cli = Cli::parse();
-    match cli.command {
-        Some(Command::Collect { path }) => {
-            // Skeleton: just open the path. A real read failure round-trips through
-            // `ClsError::IoError` (`CLS-E0001`) and miette renders the fancy diagnostic.
-            std::fs::read(&path).map_err(|source| ClsError::IoError {
-                path: path.display().to_string(),
-                source,
-            })?;
-            println!("collected (placeholder) — {}", path.display());
-            Ok(())
+    match run(cli) {
+        Ok(()) => process::exit(0),
+        Err(err) => {
+            let code = err.exit_code();
+            // Render through miette so the user gets the 4-part diagnostic (code +
+            // message + cause chain + help) before the process exits with the
+            // variant-specific code.
+            eprintln!("{:?}", miette::Report::new(err));
+            process::exit(code);
         }
+    }
+}
+
+/// Dispatch the parsed CLI to the underlying functionality. Returns a
+/// `ClsError` (rather than `miette::Report`) so [`main`] can read the typed
+/// variant and map it to the per-variant exit code.
+fn run(cli: Cli) -> Result<(), ClsError> {
+    match cli.command {
+        Some(Command::Collect {
+            from_logs,
+            from_tlparse,
+            from_dynamo_explain,
+            output: _output,
+            iterations: _iterations,
+            redaction: _redaction,
+        }) => collect(from_logs, from_tlparse, from_dynamo_explain),
+
+        Some(Command::RecompileSummary {
+            session,
+            format: _format,
+        }) => recompile_summary(session),
+
         Some(Command::Migrate {
             input,
             output,
             dry_run,
-        }) => {
-            if dry_run {
-                let version = cls_schema_migrate::detect_schema_version(&input)?;
-                println!("no changes (artifact is already at schema {version})");
-                Ok(())
-            } else if let Some(out) = output {
-                cls_schema_migrate::migrate_to_current(&input, &out)?;
-                println!("migrated {} -> {}", input.display(), out.display());
-                Ok(())
-            } else {
-                Err(ClsError::InvalidCliArgs {
-                    detail: "either --output <path> or --dry-run is required".into(),
-                }
-                .into())
-            }
-        }
+        }) => migrate(input, output, dry_run),
+
         None => Ok(()),
+    }
+}
+
+/// `cl collect` skeleton. Validates the mode and the input path; the
+/// actual collectors land in upcoming Phase 1 PRs.
+fn collect(
+    from_logs: Option<std::path::PathBuf>,
+    from_tlparse: Option<std::path::PathBuf>,
+    from_dynamo_explain: bool,
+) -> Result<(), ClsError> {
+    // clap's `group = "mode"` makes the three options mutually exclusive; this
+    // branch tells the user one of them is required if none were given.
+    let surface = match (&from_logs, &from_tlparse, from_dynamo_explain) {
+        (Some(path), None, false) => {
+            // Mode-A inputs are file paths; verify the file is readable now so
+            // a typo surfaces as the typed `IoError` (CLS-E0001) with exit code
+            // 3 instead of getting swallowed by the not-yet-implemented branch.
+            std::fs::metadata(path).map_err(|source| ClsError::IoError {
+                path: path.display().to_string(),
+                source,
+            })?;
+            "cl collect --from-logs"
+        }
+        (None, Some(dir), false) => {
+            std::fs::metadata(dir).map_err(|source| ClsError::IoError {
+                path: dir.display().to_string(),
+                source,
+            })?;
+            "cl collect --from-tlparse"
+        }
+        (None, None, true) => "cl collect --from-dynamo-explain",
+        (None, None, false) => {
+            return Err(ClsError::InvalidCliArgs {
+                detail: "one of --from-logs / --from-tlparse / --from-dynamo-explain is required"
+                    .into(),
+            });
+        }
+        // clap's `group` should make these unreachable, but the typed error is
+        // still the right answer if the surface ever drifts.
+        _ => {
+            return Err(ClsError::InvalidCliArgs {
+                detail: "--from-logs, --from-tlparse, --from-dynamo-explain are mutually exclusive"
+                    .into(),
+            });
+        }
+    };
+
+    Err(ClsError::NotYetImplemented {
+        surface: surface.into(),
+        tracking: "Phase 1 (Tool 1)".into(),
+    })
+}
+
+/// `cl recompile-summary` skeleton. Validates the session path; the
+/// analyzer itself lands in upcoming Phase 1 PRs.
+fn recompile_summary(session: std::path::PathBuf) -> Result<(), ClsError> {
+    std::fs::metadata(&session).map_err(|source| ClsError::IoError {
+        path: session.display().to_string(),
+        source,
+    })?;
+    Err(ClsError::NotYetImplemented {
+        surface: "cl recompile-summary".into(),
+        tracking: "Phase 1 (Tool 1)".into(),
+    })
+}
+
+/// `cl migrate` — unchanged from v0.5.0; kept under `run` so the dispatch
+/// returns `ClsError` uniformly.
+fn migrate(
+    input: std::path::PathBuf,
+    output: Option<std::path::PathBuf>,
+    dry_run: bool,
+) -> Result<(), ClsError> {
+    if dry_run {
+        let version = cls_schema_migrate::detect_schema_version(&input)?;
+        println!("no changes (artifact is already at schema {version})");
+        Ok(())
+    } else if let Some(out) = output {
+        cls_schema_migrate::migrate_to_current(&input, &out)?;
+        println!("migrated {} -> {}", input.display(), out.display());
+        Ok(())
+    } else {
+        Err(ClsError::InvalidCliArgs {
+            detail: "either --output <path> or --dry-run is required".into(),
+        })
     }
 }

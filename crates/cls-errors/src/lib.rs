@@ -123,6 +123,20 @@ pub enum ClsError {
         help("the MCP sandbox only permits paths under the configured allowlist")
     )]
     WorkingDirectoryAllowlistViolation { requested: String },
+
+    /// `CLS-E0011` — a CLI subcommand or analyzer function exists in the public
+    /// surface but its implementation has not landed yet. The `surface` field
+    /// identifies what was invoked (e.g. `cl collect --from-tlparse`,
+    /// `RecompileAnalyzer::analyze`); the `tracking` field points at the
+    /// upcoming PR / issue that will fill it in. Distinguishable from
+    /// `AnalyzerInternalError` because that one signals a bug in *existing*
+    /// logic, while this one signals *intentionally absent* logic.
+    #[error("not yet implemented: {surface}")]
+    #[diagnostic(
+        code("CLS-E0011"),
+        help("the surface is wired but the implementation lands later; see {tracking}")
+    )]
+    NotYetImplemented { surface: String, tracking: String },
 }
 
 impl ClsError {
@@ -143,6 +157,30 @@ impl ClsError {
             Self::SensitivePathDetected { .. } => "CLS-E0008",
             Self::RedactionPolicyDemotionRefused { .. } => "CLS-E0009",
             Self::WorkingDirectoryAllowlistViolation { .. } => "CLS-E0010",
+            Self::NotYetImplemented { .. } => "CLS-E0011",
+        }
+    }
+
+    /// Map the variant to a process exit code.
+    ///
+    /// `0` is reserved for success and is never returned here. `2` is reserved
+    /// for clap argument-parse failures (clap exits the process itself before
+    /// any `ClsError` is constructed). Runtime variants map onto `3..` so a
+    /// shell script can distinguish "file not found" from "schema parse
+    /// failed" without grepping the rendered message.
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::IoError { .. } => 3,
+            Self::SchemaParseError { .. } => 4,
+            Self::SchemaVersionMismatch { .. } => 5,
+            Self::InvalidCliArgs { .. } => 6,
+            Self::CollectorFailure { .. } => 7,
+            Self::AnalyzerInternalError { .. } => 8,
+            Self::MigrationRequired { .. } => 9,
+            Self::SensitivePathDetected { .. } => 10,
+            Self::RedactionPolicyDemotionRefused { .. } => 11,
+            Self::WorkingDirectoryAllowlistViolation { .. } => 12,
+            Self::NotYetImplemented { .. } => 13,
         }
     }
 }
