@@ -1,0 +1,17 @@
+{
+  "_comment": "Oracle for the simple_batch_size scenario. One @torch.compile-d function invoked with shapes (4,16) then (8,16). Dynamo specializes on the size of dim 0 on the first call, then recompiles when the second call breaks that guard. Tool 1's analyzer is expected to surface this as a single cluster, naming the dimension and proposing the dynamic-marking workaround.",
+  "scenario": "simple_batch_size",
+  "expected_recompile_count": 1,
+  "expected_clusters": [
+    {
+      "category": "shape",
+      "guard_template": "L['x'].size()[0] == <int>",
+      "values_observed_count": 2,
+      "expected_attribution": {
+        "function": "f",
+        "file_suffix": "tests/fixtures/recompile/_generate.py"
+      },
+      "expected_suggestion_keywords": ["mark_dynamic", "dynamic=True"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "break_reasons": [],
+  "compile_times": "TorchDynamo compilation metrics:\nFunction, Runtimes (s)\n_compile.compile_inner, 0.0265\ncompile_attempt_0, 0.0045\nbytecode_tracing, 0.0019\nget_fake_value, 0.0005\ncreate_proxy, 0.0002\nwrap_to_fake_tensor_and_record, 0.0005\nvariable_builder_call, 0.0007\ninsert_deferred_runtime_asserts, 0.0006\nOutputGraph.call_user_compiler, 0.0001\nbuild_guards, 0.0212\ngc, 0.0003",
+  "graph_break_count": 0,
+  "graph_count": 1,
+  "ops_per_graph": [
+    [
+      "<built-in function add>"
+    ]
+  ]
+}

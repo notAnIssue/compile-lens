@@ -1,0 +1,8 @@
+{
+  "_comment": "Oracle for the dynamo_explain_output scenario. The Mode C collector consumes a torch._dynamo.explain result and surfaces it into the same session shape Modes A and B produce. For the mixed_guards model, dynamo.explain itself does not break graphs (no graph_break_count > 0) — but it does report the compiled-graph operator inventory the collector should record under compiled_graphs[]. The analyzer's expectation is therefore not 'recompile clusters' but 'compiled_graphs[] populated' with the four ops produced.",
+  "scenario": "dynamo_explain_output",
+  "expected_graph_count_at_least": 1,
+  "expected_graph_break_count": 0,
+  "expected_ops_contains": ["sum", "mean", "add"],
+  "expected_compiled_graphs_populated": true
+}

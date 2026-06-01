@@ -1,0 +1,22 @@
+{
+  "_comment": "Oracle for the large_storm scenario. ~100 distinct shapes against one @torch.compile-d function. The perf benchmark inflates the count to >= 1000 events at test time by iterating the fixture; the analyzer is expected to cluster all events into a single 'shape' cluster because the guard template is uniform across calls.",
+  "scenario": "large_storm",
+  "expected_recompile_count_at_least": 100,
+  "expected_cluster_count": 1,
+  "expected_clusters": [
+    {
+      "category": "shape",
+      "guard_template": "L['x'].size()[0] == <int>",
+      "values_observed_count_at_least": 100,
+      "expected_attribution": {
+        "function": "f",
+        "file_suffix": "tests/fixtures/recompile/_generate.py"
+      },
+      "expected_suggestion_keywords": ["mark_dynamic"]
+    }
+  ],
+  "perf_target": {
+    "events_after_inflation": 1000,
+    "max_analyze_wall_clock_seconds": 1.0
+  }
+}
