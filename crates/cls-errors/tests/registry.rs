@@ -46,6 +46,10 @@ fn all_variants() -> Vec<ClsError> {
         ClsError::WorkingDirectoryAllowlistViolation {
             requested: "/etc/passwd".into(),
         },
+        ClsError::NotYetImplemented {
+            surface: "cl collect --from-tlparse".into(),
+            tracking: "Phase 1 PR plan row #6".into(),
+        },
     ]
 }
 
@@ -60,7 +64,14 @@ const EXPECTED_CODES: &[&str] = &[
     "CLS-E0008",
     "CLS-E0009",
     "CLS-E0010",
+    "CLS-E0011",
 ];
+
+/// Exit-code mapping each variant must produce; aligned with the
+/// `EXPECTED_CODES` slice above so a drift between code and exit code surfaces
+/// here. `0` is reserved for success and `2` is reserved for clap arg-parse
+/// failure (which exits the process before any `ClsError` is constructed).
+const EXPECTED_EXIT_CODES: &[i32] = &[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 
 // ── test_each_variant_has_stable_code ───────────────────────────────────────────────────
 #[test]
@@ -78,6 +89,35 @@ fn test_each_variant_has_stable_code() {
             .expect("derive must produce a code")
             .to_string();
         assert_eq!(derived, *expected, "miette-derive code mismatch");
+    }
+}
+
+// ── test_each_variant_has_distinct_exit_code ───────────────────────────────────────────
+#[test]
+fn test_each_variant_has_distinct_exit_code() {
+    let errs = all_variants();
+    assert_eq!(
+        errs.len(),
+        EXPECTED_EXIT_CODES.len(),
+        "EXPECTED_EXIT_CODES must mirror EXPECTED_CODES",
+    );
+    for (err, expected) in errs.iter().zip(EXPECTED_EXIT_CODES.iter()) {
+        assert_eq!(
+            err.exit_code(),
+            *expected,
+            "{} exit code mismatch",
+            err.code()
+        );
+    }
+
+    // `0` is success; `2` belongs to clap. No runtime variant may collide.
+    for err in &errs {
+        let code = err.exit_code();
+        assert!(
+            code != 0 && code != 2,
+            "{} returned reserved exit code",
+            err.code()
+        );
     }
 }
 

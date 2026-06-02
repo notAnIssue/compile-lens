@@ -1,14 +1,13 @@
-//! `cls-analyzer` — skeleton crate. Real implementation lands in a later change.
+//! `cls-analyzer` — Rust side of the toolkit's analysis layer.
 //!
-//! Carries a sample `#[tracing::instrument]` so the workspace exercises the attribute
-//! path (span entry/exit are emitted at INFO by default) — once a real analyzer function
-//! lands, the same pattern applies without re-discovering the crate / feature setup.
+//! Each tool's analyzer lives in its own module. The shared shape is a
+//! single `analyze` entry point that takes a parsed [`cls_schema::Session`]
+//! and returns a tool-specific findings struct (`Result<_, ClsError>`).
+//!
+//! In Phase 1 the only wired analyzer is [`recompile`] (Tool 1 — recompile
+//! aggregator). Its surface is in place — types declared, public functions
+//! callable, the standard `#[tracing::instrument]` wrap on `analyze` — but
+//! the implementation returns [`ClsError::NotYetImplemented`] until the
+//! upcoming Phase 1 PRs land the clustering and suggestion logic.
 
-/// Placeholder so the crate compiles as part of the workspace.
-///
-/// Wrapped in `#[tracing::instrument]` to verify the attribute compiles against the
-/// workspace-pinned `tracing` and to seed the pattern for the real analyzer.
-#[tracing::instrument]
-pub fn placeholder() {
-    tracing::debug!("cls-analyzer placeholder called");
-}
+pub mod recompile;
