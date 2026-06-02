@@ -58,6 +58,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regenerates the fixtures from `torch == 2.12.0+cpu` + `tlparse == 0.4.3`.
   Absolute paths, ISO timestamps, and PIDs are scrubbed so the fixtures
   diff byte-clean across machines.
+- `crates/cls-cli/tests/collect_cli.rs` — six subprocess integration tests
+  pinning the `cl collect` / `cl recompile-summary` exit-code contract
+  (3 for `CLS-E0001`, 6 for `CLS-E0004`, 13 for `CLS-E0011`).
+- `crates/cls-analyzer/tests/recompile_basic.rs` — two unit tests pinning
+  the `recompile::analyze` surface (empty session → default findings;
+  non-empty session → `NotYetImplemented`).
+
+### Added
+
+- `CLS-E0011 NotYetImplemented` error variant — a typed signal that a
+  surface exists in the CLI / public API but its implementation lands
+  later. Distinguishable from `AnalyzerInternalError`, which signals a
+  bug in *existing* logic. Carries `surface` (the invoked surface) and
+  `tracking` (the upcoming PR / issue) so the rendered diagnostic tells
+  the user where to look. Exit code 13.
+- `ClsError::exit_code()` — inherent variant-to-exit-code mapping
+  (`3..13` for `CLS-E0001..CLS-E0011`). `0` is reserved for success; `2`
+  is reserved for clap's argument-parse exit. A registry test pins the
+  mapping so adding a variant without an exit code fails CI.
+- `cl collect` is extended with `--from-logs <PATH>`, `--from-tlparse
+  <DIR>`, `--from-dynamo-explain`, `--output <PATH>`, `--iterations <N>`
+  (Phase 2 placeholder), and `--redaction <LEVEL>`. The mode flags are
+  mutually exclusive (clap `group = "mode"`); supplying none gives
+  `CLS-E0004` (exit 6); a nonexistent file gives `CLS-E0001` (exit 3);
+  a successfully parsed but not-yet-implemented mode gives `CLS-E0011`
+  (exit 13).
+- `cl recompile-summary <SESSION>` subcommand with `--format
+  markdown|json|text`. Same exit-code shape as `cl collect`.
+- `cls-analyzer::recompile` module — `RecompileAnalyzer`,
+  `RecompileFindings`, `GuardCategory`, `Suggestion` types plus
+  `analyze(&Session) -> Result<RecompileFindings, ClsError>`. Empty
+  sessions return default findings; non-empty sessions return
+  `NotYetImplemented` until the upcoming Phase 1 PRs land the
+  clustering and suggestion logic.
 
 ## [0.5.0-alpha.0] — 2026-05-31
 
