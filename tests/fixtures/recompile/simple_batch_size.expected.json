@@ -1,12 +1,12 @@
 {
-  "_comment": "Oracle for the simple_batch_size scenario. One @torch.compile-d function invoked with shapes (4,16) then (8,16). Dynamo specializes on the size of dim 0 on the first call, then recompiles when the second call breaks that guard. Tool 1's analyzer is expected to surface this as a single cluster, naming the dimension and proposing the dynamic-marking workaround.",
+  "_comment": "Oracle for the simple_batch_size scenario. One @torch.compile-d function called with (4,16) then (8,16); dynamo specializes dim 0 on the first call and recompiles when the second call breaks that size guard. Derived from the committed simple_batch_size.log (the TORCH_LOGS=recompiles artifact stream). Tool 1's analyzer is expected to surface a single 'size' cluster, attribute it to function f, and propose marking the dimension dynamic.",
   "scenario": "simple_batch_size",
   "expected_recompile_count": 1,
   "expected_clusters": [
     {
-      "category": "shape",
-      "guard_template": "L['x'].size()[0] == <int>",
-      "values_observed_count": 2,
+      "category": "size",
+      "guard_text_contains": ["size mismatch", "index 0"],
+      "guard_text_example": "tensor 'x' size mismatch at index 0. expected 4, actual 8",
       "expected_attribution": {
         "function": "f",
         "file_suffix": "tests/fixtures/recompile/_generate.py"
