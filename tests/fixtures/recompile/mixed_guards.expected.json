@@ -1,11 +1,12 @@
 {
-  "_comment": "Oracle for the mixed_guards scenario. Four calls to one @torch.compile-d function: (8,4), (16,4), (16,4)/float64, (16,8).t(). Each call after the first breaks a different guard family (size, dtype, stride). Tool 1's analyzer is expected to produce three distinct clusters, one per category, with the right attribution and category-appropriate suggestions.",
+  "_comment": "Oracle for the mixed_guards scenario. Four calls to one @torch.compile-d function isolate three guard categories against the first (8,4) float32 contiguous call: (16,4)=size, (8,4) float64=dtype, (4,8).t()=stride (same shape (8,4), non-contiguous). Derived from the committed mixed_guards.log. NOTE: the third recompile (compile_id 0/3) lists, besides the defining stride failure against the float32 entries (0/0, 0/1), an incidental dtype failure against the float64 entry (0/2) -- that is normal, dynamo reports the failing guard against every cached entry. The recompile's defining new condition is the stride/contiguity change. Tool 1's analyzer is expected to produce three clusters, one per category, with category-appropriate suggestions.",
   "scenario": "mixed_guards",
   "expected_recompile_count": 3,
   "expected_clusters": [
     {
-      "category": "shape",
-      "guard_template": "L['x'].size()[<dim>] == <int>",
+      "category": "size",
+      "guard_text_contains": ["size mismatch", "index 0"],
+      "guard_text_example": "tensor 'x' size mismatch at index 0. expected 8, actual 16",
       "expected_attribution": {
         "function": "f",
         "file_suffix": "tests/fixtures/recompile/_generate.py"
@@ -14,7 +15,8 @@
     },
     {
       "category": "dtype",
-      "guard_template": "L['x'].dtype == <dtype>",
+      "guard_text_contains": ["dtype mismatch"],
+      "guard_text_example": "tensor 'x' dtype mismatch. expected Float, actual Double",
       "expected_attribution": {
         "function": "f",
         "file_suffix": "tests/fixtures/recompile/_generate.py"
@@ -23,7 +25,8 @@
     },
     {
       "category": "stride",
-      "guard_template_contains": ["stride", "contiguous"],
+      "guard_text_contains": ["stride mismatch"],
+      "guard_text_example": "tensor 'x' stride mismatch at index 0. expected 4, actual 1",
       "expected_attribution": {
         "function": "f",
         "file_suffix": "tests/fixtures/recompile/_generate.py"
