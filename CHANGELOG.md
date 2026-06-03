@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `compile_lens.collectors.recompile.RecompileCollector` — the Tool 1
+  collector core. Accumulates `Recompilation` / `CompiledGraph` records via
+  an additive `add_records` pipeline, dispatches over the three input modes
+  (`collect(mode, source)`; an unknown mode fails closed with `ValueError`),
+  and `finalize()` writes a schema-valid `.cls.json`. The per-mode parsers
+  (Mode A logs / Mode B tlparse / Mode C dynamo.explain) and command
+  scrubbing land in later sections; this PR establishes the surface they
+  plug into. The redaction policy is coerced through the fail-closed
+  `RedactionPolicy` enum and recorded in the session.
 - `CONTRIBUTING.md` capturing the naming, bundling, changelog, and ADR rules
   that the maintainers follow (ADR-028 holds the rationale).
 - `scripts/preflight.sh` — one command runs every CI check locally; `--quick`
@@ -64,6 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `crates/cls-analyzer/tests/recompile_basic.rs` — two unit tests pinning
   the `recompile::analyze` surface (empty session → default findings;
   non-empty session → `NotYetImplemented`).
+- `python/tests/collectors/test_recompile.py` — six tests pinning the
+  `RecompileCollector` core: construction defaults, the additive
+  `add_records` pipeline, `finalize()` output validated against both the
+  pydantic binding and the `schema/v0.5.0.json` oracle (via the new
+  `jsonschema` dev dependency), and the unknown-mode `ValueError`.
 
 ### Added
 

@@ -34,6 +34,8 @@ dev = [
     "mypy>=1.11",
     "ruff>=0.6",
     "pre-commit>=4.0",
+    "jsonschema>=4.0",
+    "types-jsonschema>=4.0",
 ]
 
 [project.scripts]
@@ -63,3 +65,10 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
 warn_return_any = true
+
+# torch is a soft dependency (the user brings their own; see the deps comment above),
+# so it is absent in the lint/typecheck CI job. The collector imports it lazily inside a
+# try/except and never relies on its types, so a missing stub is expected, not an error.
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*"]
+ignore_missing_imports = true
