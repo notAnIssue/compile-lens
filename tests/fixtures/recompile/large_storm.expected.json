@@ -1,13 +1,14 @@
 {
-  "_comment": "Oracle for the large_storm scenario. ~100 distinct shapes against one @torch.compile-d function. The perf benchmark inflates the count to >= 1000 events at test time by iterating the fixture; the analyzer is expected to cluster all events into a single 'shape' cluster because the guard template is uniform across calls.",
+  "_comment": "Oracle for the large_storm scenario. 50 distinct 1-D shapes (sizes 1..50) against one @torch.compile(dynamic=False)-d function, each forcing a fresh recompile -- 49 recompiles total (the first call is the initial compile). Derived from the committed large_storm.log. Every failure is the same size guard, so the analyzer is expected to collapse them into a single 'size' cluster. The perf benchmark inflates the event count at test time by iterating the fixture, so the committed fixture stays under the 500 KB pre-commit ceiling.",
   "scenario": "large_storm",
-  "expected_recompile_count_at_least": 100,
+  "expected_recompile_count": 49,
   "expected_cluster_count": 1,
   "expected_clusters": [
     {
-      "category": "shape",
-      "guard_template": "L['x'].size()[0] == <int>",
-      "values_observed_count_at_least": 100,
+      "category": "size",
+      "guard_text_contains": ["size mismatch", "index 0"],
+      "guard_text_example": "tensor 'x' size mismatch at index 0. expected 1, actual 2",
+      "values_observed_count_at_least": 49,
       "expected_attribution": {
         "function": "f",
         "file_suffix": "tests/fixtures/recompile/_generate.py"
