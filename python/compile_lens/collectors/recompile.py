@@ -31,6 +31,7 @@ from compile_lens._schema import (
     SCHEMA_VERSION,
     ClsArtifact,
     CompiledGraph,
+    GraphBreak,
     Recompilation,
     RedactionPolicy,
     Session,
@@ -96,6 +97,7 @@ class RecompileCollector:
         self._command = command
         self._recompilations: list[Recompilation] = []
         self._compiled_graphs: list[CompiledGraph] = []
+        self._graph_breaks: list[GraphBreak] = []
 
     # ── common pipeline ──────────────────────────────────────────────────────────────
     def add_records(
@@ -103,13 +105,15 @@ class RecompileCollector:
         *,
         recompilations: Iterable[Recompilation] = (),
         compiled_graphs: Iterable[CompiledGraph] = (),
+        graph_breaks: Iterable[GraphBreak] = (),
     ) -> None:
         """Append parsed records. Additive across calls so each mode contributes its own
         slice without clobbering an earlier one."""
         self._recompilations.extend(recompilations)
         self._compiled_graphs.extend(compiled_graphs)
+        self._graph_breaks.extend(graph_breaks)
 
-    # ── modes (Mode B/C parsers land in later PRs) ───────────────────────────────────
+    # ── modes ────────────────────────────────────────────────────────────────────────
     def from_logs(self, log_path: Path | str) -> None:
         """Mode A — parse a ``TORCH_LOGS=recompiles`` text dump and ingest its recompiles."""
         from compile_lens.collectors._logs_parser import parse_recompiles_log
@@ -118,12 +122,20 @@ class RecompileCollector:
         self.add_records(recompilations=parse_recompiles_log(text))
 
     def from_tlparse(self, tlparse_dir: Path | str) -> None:
-        """Mode B — adapt a ``tlparse`` output directory. Implemented in a later PR."""
-        raise NotImplementedError("Mode B (from_tlparse) lands in a later PR")
+        """Mode B — adapt a ``tlparse`` output directory (its structured ``raw.jsonl`` +
+        ``compile_directory.json``) into recompiles + compiled graphs."""
+        from compile_lens.collectors.tlparse_adapter import parse_tlparse_dir
+
+        recompilations, compiled_graphs = parse_tlparse_dir(Path(tlparse_dir))
+        self.add_records(recompilations=recompilations, compiled_graphs=compiled_graphs)
 
     def from_dynamo_explain(self, explain_result: Any) -> None:
-        """Mode C — adapt a ``torch._dynamo.explain`` result. Implemented in a later PR."""
-        raise NotImplementedError("Mode C (from_dynamo_explain) lands in a later PR")
+        """Mode C — adapt a ``torch._dynamo.explain`` result (the object or its serialized
+        fields) into graph breaks + compiled graphs."""
+        from compile_lens.collectors._dynamo_explain_adapter import parse_dynamo_explain
+
+        graph_breaks, compiled_graphs = parse_dynamo_explain(explain_result)
+        self.add_records(graph_breaks=graph_breaks, compiled_graphs=compiled_graphs)
 
     def collect(self, mode: Mode | str, source: Any) -> None:
         """Dispatch to the handler for ``mode``. An unrecognized mode raises ``ValueError``
@@ -153,11 +165,17 @@ class RecompileCollector:
     def finalize(self) -> Path:
         """Assemble the accumulated records into a :class:`ClsArtifact` and write it to
         :attr:`output_path`. Returns the path written."""
+        # graph_breaks defaults to [] in the schema; pass it only when non-empty so the
+        # exclude_unset serializer keeps a Mode-A/B artifact byte-identical to before.
+        optional: dict[str, list[GraphBreak]] = (
+            {"graph_breaks": self._graph_breaks} if self._graph_breaks else {}
+        )
         artifact = ClsArtifact(
             schema_version=SCHEMA_VERSION,
             session=self._build_session(),
             recompilations=self._recompilations,
             compiled_graphs=self._compiled_graphs,
+            **optional,
         )
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(to_json(artifact))
@@ -166,6 +184,7 @@ class RecompileCollector:
             output_path=str(self.output_path),
             recompilations=len(self._recompilations),
             compiled_graphs=len(self._compiled_graphs),
+            graph_breaks=len(self._graph_breaks),
             redaction_policy=str(self.redaction_policy),
         )
         return self.output_path
