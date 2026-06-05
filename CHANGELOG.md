@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Mode B collector — `compile_lens.collectors.tlparse_adapter.parse_tlparse_dir`
+  reads a `tlparse` output directory (its `compile_directory.json` compile-id
+  index + `raw.jsonl` events) into one `CompiledGraph` per compile (with the
+  dynamo/inductor artifact paths + the symbolic `guard_added_fast` guards) and
+  one `Recompilation` per compile with counter ≥ 1 (attribution + backend
+  compile time). It wraps tlparse rather than re-parsing the trace (P8); a
+  malformed `raw.jsonl` line is skipped, not raised. `RecompileCollector.from_tlparse`
+  is wired to it.
+- Mode C collector — `compile_lens.collectors._dynamo_explain_adapter.parse_dynamo_explain`
+  adapts a `torch._dynamo.explain` result (the live object or its serialized
+  dict) into `GraphBreak`s (one per break reason) + `CompiledGraph`s (one per
+  graph). It is a single-run structural view, so it never contributes
+  `recompilations`. `RecompileCollector.from_dynamo_explain` is wired to it.
+- `RecompileCollector.add_records` / `finalize` now also carry `graph_breaks`
+  (needed by Mode C); an artifact with no graph breaks stays byte-identical.
 - Mode A collector — `compile_lens.collectors._logs_parser.parse_recompiles_log`
   turns a `TORCH_LOGS=recompiles` text dump into `Recompilation` records (one
   per recompile block: compile id, function, primary failed guard with
@@ -91,6 +106,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   size/dtype/stride extraction, base-compile primary-guard selection, prefix
   robustness across torch-version log formats, malformed-line skipping, and
   the `from_logs` end-to-end into a valid `.cls.json`.
+- `python/tests/collectors/test_tlparse_adapter.py` — 8 tests for Mode B
+  against the committed `tlparse_output/` fixture (3 recompiles / 4 graphs):
+  recompile detection, compiled-graph artifact paths, guard mapping, wall-clock
+  from metrics, missing-file + malformed-line + partial-capture tolerance, and
+  `from_tlparse` end-to-end.
+- `python/tests/collectors/test_dynamo_explain.py` — 5 tests for Mode C: the
+  no-break fixture, a with-breaks dict, the live-object shape, the
+  no-recompilation guarantee, and a `graph_breaks` round-trip validated against
+  the `schema/v0.5.0.json` oracle.
 
 ### Added
 
