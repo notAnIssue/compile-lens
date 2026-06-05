@@ -109,10 +109,13 @@ class RecompileCollector:
         self._recompilations.extend(recompilations)
         self._compiled_graphs.extend(compiled_graphs)
 
-    # ── modes (parsers land in later PRs) ────────────────────────────────────────────
+    # ── modes (Mode B/C parsers land in later PRs) ───────────────────────────────────
     def from_logs(self, log_path: Path | str) -> None:
-        """Mode A — parse ``TORCH_LOGS=+recompiles`` raw text. Implemented in a later PR."""
-        raise NotImplementedError("Mode A (from_logs) lands in a later PR")
+        """Mode A — parse a ``TORCH_LOGS=recompiles`` text dump and ingest its recompiles."""
+        from compile_lens.collectors._logs_parser import parse_recompiles_log
+
+        text = Path(log_path).read_text()
+        self.add_records(recompilations=parse_recompiles_log(text))
 
     def from_tlparse(self, tlparse_dir: Path | str) -> None:
         """Mode B — adapt a ``tlparse`` output directory. Implemented in a later PR."""
