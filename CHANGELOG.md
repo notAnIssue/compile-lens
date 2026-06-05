@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Mode A collector — `compile_lens.collectors._logs_parser.parse_recompiles_log`
+  turns a `TORCH_LOGS=recompiles` text dump into `Recompilation` records (one
+  per recompile block: compile id, function, primary failed guard with
+  expression + previous/new value, recompile ordinal). It keys off the
+  `[__recompiles]` marker and ignores the version-specific log prefix, and
+  skips malformed lines with a warning rather than raising. `RecompileCollector.from_logs`
+  is wired to it, so `cl collect --from-logs` / `collect("logs", path)` now
+  produce a populated `.cls.json`.
 - `compile_lens.collectors.recompile.RecompileCollector` — the Tool 1
   collector core. Accumulates `Recompilation` / `CompiledGraph` records via
   an additive `add_records` pipeline, dispatches over the three input modes
@@ -78,6 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `add_records` pipeline, `finalize()` output validated against both the
   pydantic binding and the `schema/v0.5.0.json` oracle (via the new
   `jsonschema` dev dependency), and the unknown-mode `ValueError`.
+- `python/tests/collectors/test_logs_parser.py` — 13 tests for the Mode A
+  parser: the three committed fixtures (simple / mixed / large_storm), focused
+  size/dtype/stride extraction, base-compile primary-guard selection, prefix
+  robustness across torch-version log formats, malformed-line skipping, and
+  the `from_logs` end-to-end into a valid `.cls.json`.
 
 ### Added
 
