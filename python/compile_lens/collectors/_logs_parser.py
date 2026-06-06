@@ -49,6 +49,20 @@ _COMPILE_ID_RE = re.compile(r"\[(\d+/\d+)\]\s*\[__recompiles\]")
 _GUARD_FAILURE_RE = re.compile(r"^-\s*(\d+/\d+):\s*(.+?)\s*$")
 #: ``<expression>. expected <prev>, actual <new>`` inside a guard text.
 _EXPECTED_ACTUAL_RE = re.compile(r"^(.*?)\.\s*expected\s+(.+?),\s*actual\s+(.+?)\.?\s*$")
+#: torch appends a `` # <source line> # <file>:<line> in <fn>`` comment after non-tensor
+#: guards (e.g. ``n == 1   # return x + n  # model.py:5 in f``). A guard expression never
+#: contains a whitespace-``#``, so the first one marks the start of that comment.
+_SOURCE_COMMENT_RE = re.compile(r"\s+#")
+
+
+def _strip_source_comment(guard_text: str) -> str:
+    """Drop torch's trailing source comment from a guard text, keeping just the expression.
+
+    Tensor shape/dtype/stride guards carry no such comment and pass through unchanged; the
+    raw-expression guards (``n == 1``, ``G['flag'] == True``) get the appended source frame
+    stripped so structurally-identical guards from different call sites still cluster.
+    """
+    return _SOURCE_COMMENT_RE.split(guard_text, maxsplit=1)[0].rstrip()
 
 
 def _split_expected_actual(guard_text: str) -> tuple[str, str | None, str | None]:
@@ -138,10 +152,17 @@ def parse_recompiles_log(text: str) -> list[Recompilation]:
             if compile_id is None:
                 _log.warning("recompiles_guard_before_header", line=body)
                 continue
-            expression, previous, new = _split_expected_actual(guard.group(2))
+            expression, previous, new = _split_expected_actual(
+                _strip_source_comment(guard.group(2))
+            )
             failures.append((guard.group(1), expression, previous, new))
             continue
 
+        # torch emits a "- User stack trace:" sub-block (file frames, source lines) after a
+        # guard failure; those are `-`-prefixed continuation lines we don't model. Skip them
+        # silently — only a non-continuation line under [__recompiles] is genuinely unexpected.
+        if body.startswith("-"):
+            continue
         _log.warning("recompiles_line_unrecognized", line=body)
 
     _flush()

@@ -1,0 +1,17 @@
+{
+  "_comment": "Oracle for the nonshape_guards scenario. A @torch.compile function called with a changing python int arg `n`; dynamo specializes on the value and recompiles when it changes, with a guard `n == 1` — a raw boolean expression that carries NO expected/actual value (unlike a tensor shape/dtype/stride mismatch). torch appends a ` # <source> # <file>:<line>` comment after such guards; Mode A must strip it from the expression. Also exercises the `- User stack trace:` continuation lines that follow (skipped, not parsed as guards). This is the non-shape case the shape-only corpus was missing — the reason `failed_guard.previous_value`/`new_value` are Optional.",
+  "scenario": "nonshape_guards",
+  "expected_recompile_count": 1,
+  "expected_clusters": [
+    {
+      "category": "other",
+      "guard_text_contains": ["n == 1"],
+      "guard_has_expected_actual": false,
+      "expected_attribution": {
+        "function": "f",
+        "file_suffix": "tests/fixtures/recompile/_generate.py"
+      },
+      "expected_suggestion_keywords": []
+    }
+  ]
+}
