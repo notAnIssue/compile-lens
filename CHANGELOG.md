@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Guard clustering (Tool 1 analyzer core) — `cls_analyzer::recompile::analyze` now
+  clusters a session's recompiles instead of returning `NotYetImplemented`. Following
+  the describe→attribute north star (ADR-032), it parses each failed guard's structured
+  text (`tensor 'x' size mismatch at index 0`) into a category (`size`/`dtype`/`stride`,
+  else `other`), a canonical template, and a **dynamic axis** (`x[0]`), then groups by
+  `(category, axis)` so each actionable axis is its own cluster (`GuardCategory` with
+  count + distinct `previous→new` value transitions). Output is deterministic
+  (count-desc, then template, then axis). `analyze` now takes `&ClsArtifact` (the
+  recompiles live on the parent artifact, not the nested `Session`). Hand-parses the
+  guard text rather than adding a regex dependency (ADR-015 right-sizing); the clustering
+  algorithm choice is recorded inline in the module (no standalone ADR: the structured
+  guard text made the anticipated token/AST/edit-distance clustering choice moot).
 - Collect-time redaction (D11) — `compile_lens.security.redactor`: `scrub_command`
   (argv token scrub), `normalize_path` (collapse user/install paths to `{repo}` /
   `{torch_install}` placeholders and **refuse** a credential-dir path by raising
@@ -130,6 +142,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.gnupg`), argv token scrub (hf / openai / bearer / aws), FQDN hashing,
   env whitelist/denylist, and the collector wiring (strict scrubs command + host,
   `internal` keeps raw, sensitive compiled-graph path refused at finalize).
+- `crates/cls-analyzer/tests/recompile_cluster.rs` — 8 tests for guard clustering:
+  single / multi-category, canonical-template + axis extraction, axis-level separation
+  (`x[0]` vs `x[1]`), deduped value transitions, `other`-category literal canonicalization,
+  malformed-guard skipping (still counted), and determinism. `recompile_basic.rs` updated
+  to the `&ClsArtifact` signature.
 
 ### Added
 

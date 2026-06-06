@@ -1,12 +1,10 @@
-//! Tests for the Tool 1 analyzer skeleton.
+//! Surface tests for the Tool 1 analyzer entry point.
 //!
-//! The implementation is intentionally absent — the upcoming Phase 1 PRs
-//! fill it in. These tests pin the **surface** so the typed errors,
-//! default-empty behaviour, and signature contract don't drift while the
-//! algorithm work is in flight.
+//! Pins the `analyze(&ClsArtifact)` signature and the empty-artifact contract; the clustering
+//! behaviour itself is covered in `recompile_cluster.rs`.
 
 use cls_analyzer::recompile;
-use cls_schema::{RedactionPolicy, Session};
+use cls_schema::{ClsArtifact, RedactionPolicy, Session};
 
 fn minimal_session() -> Session {
     Session {
@@ -34,27 +32,11 @@ fn minimal_session() -> Session {
 }
 
 #[test]
-fn analyze_empty_session_returns_default_findings() {
-    // Empty session → default findings. This is the call-site smoke test
-    // that proves the surface is wired: callers can `analyze(&session)`
-    // and get a `RecompileFindings` without hitting the not-yet-implemented
-    // branch.
-    let session = minimal_session();
-    let findings = recompile::analyze(&session).expect("empty session should not error");
+fn analyze_empty_artifact_returns_default_findings() {
+    // An artifact with no recompiles → zero count, no clusters, no suggestions, no error.
+    let artifact = ClsArtifact::new(minimal_session());
+    let findings = recompile::analyze(&artifact).expect("empty artifact should not error");
     assert_eq!(findings.total_recompilations, 0);
     assert!(findings.guard_categories.is_empty());
     assert!(findings.top_suggestions.is_empty());
-}
-
-#[test]
-fn analyze_session_with_recompiles_is_not_yet_implemented() {
-    // Once `iteration_count > 0` we're in the actual analyzer territory,
-    // which has not landed. The skeleton returns `NotYetImplemented` with
-    // the surface and tracking pointer named.
-    let mut session = minimal_session();
-    session.iteration_count = Some(3);
-
-    let err = recompile::analyze(&session).expect_err("nonempty session should not be ok");
-    assert_eq!(err.code(), "CLS-E0011");
-    assert_eq!(err.exit_code(), 13);
 }
