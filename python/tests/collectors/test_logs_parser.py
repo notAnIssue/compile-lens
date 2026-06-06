@@ -161,6 +161,55 @@ def test_parse_non_artifact_lines_ignored() -> None:
     assert parse_recompiles_log(text) == []
 
 
+# ── non-shape guards: no expected/actual + torch's trailing source comment ───────────────
+# Not every guard is a tensor shape/dtype/stride mismatch. Boolean/value guards
+# (`n == 1`, `G['flag'] == True`) carry no before/after value, and torch appends a
+# ` # <source> # <file>:<line>` comment the parser must strip.
+def test_parse_nonshape_fixture_strips_comment_and_has_no_values() -> None:
+    recs = parse_recompiles_log((_FIXTURES / "nonshape_guards.log").read_text())
+    assert len(recs) == 1
+    (r,) = recs
+    assert r.compiled_function_id == "f"
+    # the trailing " # return x + n  # ...:205 in f" comment is stripped off the expression
+    assert r.failed_guard.expression == "n == 1"
+    # a value guard has no expected/actual
+    assert r.failed_guard.previous_value is None
+    assert r.failed_guard.new_value is None
+
+
+def test_parse_strips_source_comment_from_boolean_guard() -> None:
+    guard = "G['flag'] == True                 # return x + 1 if flag else x - 1  # m.py:7 in f"
+    (r,) = parse_recompiles_log(_one_block("0/1", "f", guard))
+    assert r.failed_guard.expression == "G['flag'] == True"
+    assert r.failed_guard.previous_value is None
+    assert r.failed_guard.new_value is None
+
+
+def test_parse_requires_grad_guard_has_no_actual() -> None:
+    # "expected requires_grad=0" with no ", actual ..." -> kept whole, no values extracted.
+    (r,) = parse_recompiles_log(
+        _one_block("0/1", "g", "tensor 'x' requires_grad mismatch. expected requires_grad=0")
+    )
+    assert "requires_grad mismatch" in r.failed_guard.expression
+    assert r.failed_guard.previous_value is None
+    assert r.failed_guard.new_value is None
+
+
+def test_parse_skips_user_stack_trace_continuation_lines() -> None:
+    p = "V<TS> <PID> guards.py:1] [0/1] [__recompiles] "
+    text = (
+        f"{p}Recompiling function f in /m.py:7\n"
+        f"{p}    triggered by the following guard failure(s):\n"
+        f"{p}    - 0/0: n == 1   # return x + n  # m.py:5 in f\n"
+        f"{p}    - User stack trace:\n"
+        f'{p}    -   File "/m.py", line 5, in f\n'
+        f"{p}    -     return x + n\n"
+    )
+    recs = parse_recompiles_log(text)  # the `-`-prefixed stack lines must be skipped silently
+    assert len(recs) == 1
+    assert recs[0].failed_guard.expression == "n == 1"
+
+
 # ── collector wiring (Mode A end-to-end into a .cls.json) ─────────────────────────────────
 def test_from_logs_ingests_into_valid_cls_json(tmp_path: Path) -> None:
     out = tmp_path / "session.cls.json"

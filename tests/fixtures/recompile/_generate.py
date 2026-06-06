@@ -188,10 +188,31 @@ def _workload_large_storm():
         f(torch.randn(i))
 
 
+def _workload_nonshape_guards():
+    """Recompiles driven by guards that are NOT tensor shape/dtype/stride.
+
+    A python int argument specialization: dynamo guards on the concrete value of ``n``, so
+    each new ``n`` recompiles with a guard like ``n == 1`` — a raw boolean expression that
+    carries **no** ``expected/actual`` value (unlike a shape mismatch). torch also appends a
+    `` # <source> # <file>:<line>`` comment after such guards, which the Mode A parser must
+    strip. This is the fixture that the shape-only corpus was missing.
+    """
+
+    import torch  # noqa: PLC0415
+
+    @torch.compile
+    def f(x, n):
+        return x + n
+
+    for n in (1, 2, 3):
+        f(torch.randn(4), n)
+
+
 #: Scenario name -> workload. The subprocess entry point (``--workload <name>``)
 #: looks the workload up here and runs it under the parent's ``TORCH_LOGS``.
 _WORKLOADS = {
     "simple_batch_size": _workload_simple_batch_size,
+    "nonshape_guards": _workload_nonshape_guards,
     "mixed_guards": _workload_mixed_guards,
     "large_storm": _workload_large_storm,
 }

@@ -1,0 +1,6 @@
+V<TS> <PID> torch/_dynamo/guards.py:5188] [0/1] [__recompiles] Recompiling function f in <REPO>/tests/fixtures/recompile/_generate.py:203
+V<TS> <PID> torch/_dynamo/guards.py:5188] [0/1] [__recompiles]     triggered by the following guard failure(s):
+V<TS> <PID> torch/_dynamo/guards.py:5188] [0/1] [__recompiles]     - 0/0: n == 1                                                   # return x + n  # tests/fixtures/recompile/_generate.py:205 in f
+V<TS> <PID> torch/_dynamo/guards.py:5188] [0/1] [__recompiles]     - User stack trace:
+V<TS> <PID> torch/_dynamo/guards.py:5188] [0/1] [__recompiles]     -   File "<REPO>/tests/fixtures/recompile/_generate.py", line 205, in f
+V<TS> <PID> torch/_dynamo/guards.py:5188] [0/1] [__recompiles]     -     return x + n
