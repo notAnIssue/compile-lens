@@ -93,6 +93,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pre-commit install` covers both stages now via
   `default_install_hook_types`.
 
+### Fixed
+
+- Mode A parser: non-shape guards are now parsed cleanly. torch appends a
+  ` # <source> # <file>:<line>` comment after value/boolean guards
+  (`n == 1`, `G['flag'] == True`); the parser now strips it from
+  `failed_guard.expression` (it was leaking into the expression and breaking
+  clustering of the same guard across call sites). The `- User stack trace:`
+  continuation block that follows a failure is skipped silently instead of
+  logging an "unrecognized line" warning per frame. Documented that
+  `failed_guard.previous_value` / `new_value` are genuinely optional — only
+  tensor shape/dtype/stride mismatches carry a before/after value; boolean
+  and value guards carry none. (The shape-only fixture corpus had hidden
+  this; see the new `nonshape_guards` fixture.)
+
 ### Documentation
 
 - ADR-029 — *defer Tool 1 schema-field refinement to v0.6*. Phase 1's
@@ -112,6 +126,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regenerates the fixtures from `torch == 2.12.0+cpu` + `tlparse == 0.4.3`.
   Absolute paths, ISO timestamps, and PIDs are scrubbed so the fixtures
   diff byte-clean across machines.
+- `tests/fixtures/recompile/nonshape_guards.log` (+ oracle) — a non-shape
+  guard recompile (`n == 1`, a python-int specialization) with torch's trailing
+  source comment and a `- User stack trace:` block; the case the shape-only
+  corpus was missing. `_generate.py` grows a `nonshape_guards` workload.
+  `test_logs_parser.py` gains 4 tests (comment stripping, no-value guards,
+  `requires_grad` expected-without-actual, stack-trace skipping).
 - `crates/cls-cli/tests/collect_cli.rs` — six subprocess integration tests
   pinning the `cl collect` / `cl recompile-summary` exit-code contract
   (3 for `CLS-E0001`, 6 for `CLS-E0004`, 13 for `CLS-E0011`).
