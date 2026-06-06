@@ -1,13 +1,12 @@
 //! `cls-analyzer` — Rust side of the toolkit's analysis layer.
 //!
 //! Each tool's analyzer lives in its own module. The shared shape is a
-//! single `analyze` entry point that takes a parsed [`cls_schema::Session`]
+//! single `analyze` entry point that takes a parsed [`cls_schema::ClsArtifact`]
 //! and returns a tool-specific findings struct (`Result<_, ClsError>`).
 //!
-//! In Phase 1 the only wired analyzer is [`recompile`] (Tool 1 — recompile
-//! aggregator). Its surface is in place — types declared, public functions
-//! callable, the standard `#[tracing::instrument]` wrap on `analyze` — but
-//! the implementation returns [`ClsError::NotYetImplemented`] until the
-//! upcoming Phase 1 PRs land the clustering and suggestion logic.
+//! In Phase 1 the wired analyzer is [`recompile`] (Tool 1 — recompile aggregator):
+//! [`recompile::analyze`] clusters a session's guard failures into dynamic-axis-attributed
+//! findings ([`recompile_cluster`] holds the algorithm). Ranked suggestions land in a later PR.
 
 pub mod recompile;
+pub mod recompile_cluster;
