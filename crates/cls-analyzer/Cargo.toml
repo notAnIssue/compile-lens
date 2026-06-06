@@ -8,4 +8,5 @@ rust-version.workspace = true
 [dependencies]
 cls-errors = { path = "../cls-errors" }
 cls-schema = { path = "../cls-schema" }
+indexmap = { workspace = true }
 tracing = { workspace = true }
