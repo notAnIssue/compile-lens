@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Collect-time redaction (D11) — `compile_lens.security.redactor`: `scrub_command`
+  (argv token scrub), `normalize_path` (collapse user/install paths to `{repo}` /
+  `{torch_install}` placeholders and **refuse** a credential-dir path by raising
+  `SensitivePathError` / `CLS-E0008`), `hash_host` (FQDN → stable `dh-<hash>`),
+  `filter_env_vars` (whitelist torch.compile vars, denylist secrets). `RecompileCollector`
+  now applies these in `finalize` under a strict (`default-strict` / `public-safe`)
+  policy — the command and host are scrubbed and compiled-graph paths normalized at
+  write time, so a `default-strict` artifact never holds a raw secret; `internal` /
+  `confidential` keep raw fields. The host salt comes from `~/.compile-lens/install-id`
+  (overridable via `CLS_INSTALL_ID`). `RecompileCollector` gains a `host` parameter.
 - Mode B collector — `compile_lens.collectors.tlparse_adapter.parse_tlparse_dir`
   reads a `tlparse` output directory (its `compile_directory.json` compile-id
   index + `raw.jsonl` events) into one `CompiledGraph` per compile (with the
@@ -115,6 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no-break fixture, a with-breaks dict, the live-object shape, the
   no-recompilation guarantee, and a `graph_breaks` round-trip validated against
   the `schema/v0.5.0.json` oracle.
+- `python/tests/security/test_redactor.py` — 14 tests for collect-time redaction:
+  path normalization (home / conda) + credential-path refusal (`~/.ssh`, `~/.aws`,
+  `~/.gnupg`), argv token scrub (hf / openai / bearer / aws), FQDN hashing,
+  env whitelist/denylist, and the collector wiring (strict scrubs command + host,
+  `internal` keeps raw, sensitive compiled-graph path refused at finalize).
 
 ### Added
 
