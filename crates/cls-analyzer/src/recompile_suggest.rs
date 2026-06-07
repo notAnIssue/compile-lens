@@ -10,11 +10,44 @@
 //! noisy tool gets disabled. Clusters arrive already ordered by descending recompile count, so
 //! the suggestions inherit that "most-impactful-first" ranking.
 
-use crate::recompile::{GuardCategory, Suggestion, ValueTransition};
+use crate::recompile::{GrownCluster, GuardCategory, Suggestion, ValueTransition};
 
 /// Rank-ordered suggestions, one per actionable cluster (skipping `other`).
 pub fn suggest(clusters: &[GuardCategory]) -> Vec<Suggestion> {
     clusters.iter().filter_map(suggest_for_cluster).collect()
+}
+
+/// Regression-anchored suggestions for a session diff (ADR-033): the same fix as the
+/// single-snapshot case, but framed as "this change *introduced* / *worsened* it" — which the
+/// before/after diff makes defensible. Added clusters first (the new regressions), then grown.
+pub fn suggest_regression(added: &[GuardCategory], grown: &[GrownCluster]) -> Vec<Suggestion> {
+    let mut out = Vec::new();
+    for cluster in added {
+        if let Some(fix) = suggest_for_cluster(cluster) {
+            out.push(Suggestion {
+                text: format!(
+                    "This change introduced {} recompile(s) on a new axis — {}",
+                    cluster.count, fix.text
+                ),
+                evidence: format!("ADDED vs baseline · {}", fix.evidence),
+            });
+        }
+    }
+    for g in grown {
+        if let Some(fix) = suggest_for_cluster(&g.cluster) {
+            out.push(Suggestion {
+                text: format!(
+                    "This change worsened recompiles ({} → {}) — {}",
+                    g.base_count, g.cluster.count, fix.text
+                ),
+                evidence: format!(
+                    "GROWN vs baseline ({} → {}) · {}",
+                    g.base_count, g.cluster.count, fix.evidence
+                ),
+            });
+        }
+    }
+    out
 }
 
 /// Split an axis label (`"x[0]"` / `"x"`) into `(tensor, optional_dim)`.
@@ -45,7 +78,7 @@ fn value_summary(values: &[ValueTransition]) -> String {
     format!(" (values {}{more})", shown.join(", "))
 }
 
-fn suggest_for_cluster(cluster: &GuardCategory) -> Option<Suggestion> {
+pub(crate) fn suggest_for_cluster(cluster: &GuardCategory) -> Option<Suggestion> {
     // `other`-category clusters have no extractable axis -> no confident suggestion (N2).
     let axis = cluster.axis.as_deref()?;
     let (tensor, dim) = split_axis(axis);

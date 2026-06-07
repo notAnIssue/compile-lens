@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Session-to-session recompile diff (Tool 1 regression mode) — `cls_analyzer::recompile_diff::diff_recompiles(base, head)`
+  answers the comparison-axis question the single-snapshot analyzer can't: *what did
+  this commit/PR change about recompile behaviour vs a baseline?* It clusters both
+  sessions (reusing the clustering) and classifies into `added` (new recompile axes
+  this change introduced), `grown` (same axis, more recompiles — with the base→head
+  delta), and `removed` (fixed). Suggestions are **regression-anchored** ("this change
+  introduced N recompiles on `x[0]` → mark_dynamic(x, 0)"), which the before/after diff
+  makes defensible. Takes two parsed `ClsArtifact`s; baseline *loading* is deliberately
+  left to the caller so it can be shared with the upcoming compile-diff tool (one
+  artifact-pair loading path, not two).
 - Top suggestions (Tool 1 prescribe step) — `cls_analyzer::recompile_suggest` turns each
   actionable guard cluster into one **axis-precise** `Suggestion`: a `size` cluster on
   `x[0]` yields `torch._dynamo.mark_dynamic(x, 0)` (not a vague "consider marking something
@@ -179,6 +189,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `crates/cls-analyzer/tests/recompile_suggest.rs` — 7 tests for suggestions: axis-precise
   `mark_dynamic(x, 0)`, dtype + contiguous advice, `other` yields none, ranking by recompile
   count, the `evidence` trace carries count + value transitions, and the empty case.
+- `crates/cls-analyzer/tests/recompile_diff.rs` — 7 tests for the regression-mode diff:
+  added / grown (with base→head delta) / removed classification, identical-sessions empty
+  diff, regression-anchored suggestions for added + grown (the "this change introduced N"
+  headline), and `other`-category regression yielding no suggestion.
 
 ### Added
 
