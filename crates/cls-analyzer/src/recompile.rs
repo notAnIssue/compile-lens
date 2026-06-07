@@ -19,7 +19,7 @@
 use cls_errors::ClsError;
 use cls_schema::ClsArtifact;
 
-use crate::recompile_cluster;
+use crate::{recompile_cluster, recompile_suggest};
 
 /// The summary the analyzer produces from a session's recompile events.
 ///
@@ -67,11 +67,16 @@ pub struct ValueTransition {
     pub new: Option<String>,
 }
 
-/// A single ranked suggestion.
+/// A single ranked, evidence-linked suggestion (N2: a rejectable hint, never an auto-applied
+/// patch — and every suggestion traces back to the cluster it came from).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Suggestion {
-    /// Short, action-oriented text.
+    /// Short, action-oriented text (e.g. *"mark dim 0 of `x` dynamic …"*).
     pub text: String,
+
+    /// What cluster this is derived from — the N2 evidence trace (category, axis, count,
+    /// observed value transitions). A suggestion is never invented; it points at its data.
+    pub evidence: String,
 }
 
 /// Run Tool 1 on a parsed artifact.
@@ -82,9 +87,11 @@ pub struct Suggestion {
 /// `total_recompilations` but contributes no cluster.
 #[tracing::instrument(skip(artifact), fields(recompile_count = artifact.recompilations.len()))]
 pub fn analyze(artifact: &ClsArtifact) -> Result<RecompileFindings, ClsError> {
+    let guard_categories = recompile_cluster::cluster(&artifact.recompilations);
+    let top_suggestions = recompile_suggest::suggest(&guard_categories);
     Ok(RecompileFindings {
         total_recompilations: artifact.recompilations.len() as u64,
-        guard_categories: recompile_cluster::cluster(&artifact.recompilations),
-        top_suggestions: Vec::new(),
+        guard_categories,
+        top_suggestions,
     })
 }
