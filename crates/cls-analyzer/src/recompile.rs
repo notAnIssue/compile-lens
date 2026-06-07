@@ -79,6 +79,37 @@ pub struct Suggestion {
     pub evidence: String,
 }
 
+/// The result of diffing two sessions' recompiles (ADR-033 — the regression mode).
+///
+/// "What did this commit/PR change about the recompile behaviour, vs a baseline." This is the
+/// comparison axis the single-snapshot [`RecompileFindings`] cannot express; suggestions here
+/// are **regression-anchored** ("this change introduced N recompiles on axis X → fix"), which
+/// is more defensible than a free-floating suggestion because the diff is the ground truth.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RecompileDiff {
+    /// Guard clusters present in head but not in the baseline — recompile axes this change
+    /// *introduced*. The most important bucket (the regression).
+    pub added: Vec<GuardCategory>,
+
+    /// Clusters present in both, but with a higher recompile count in head — got *worse*.
+    pub grown: Vec<GrownCluster>,
+
+    /// Clusters present in the baseline but gone in head — *fixed* / no longer recompiling.
+    pub removed: Vec<GuardCategory>,
+
+    /// Regression-anchored suggestions for the added + grown clusters (added first).
+    pub suggestions: Vec<Suggestion>,
+}
+
+/// A cluster that exists in both sessions but recompiled more in head than in the baseline.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GrownCluster {
+    /// The head-side cluster (its `count` is the head count).
+    pub cluster: GuardCategory,
+    /// The baseline recompile count for the same `(category, axis)` (always `< cluster.count`).
+    pub base_count: u64,
+}
+
 /// Run Tool 1 on a parsed artifact.
 ///
 /// The recompile events live on [`ClsArtifact::recompilations`] (the parent artifact, not the
