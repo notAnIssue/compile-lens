@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Top suggestions (Tool 1 prescribe step) — `cls_analyzer::recompile_suggest` turns each
+  actionable guard cluster into one **axis-precise** `Suggestion`: a `size` cluster on
+  `x[0]` yields `torch._dynamo.mark_dynamic(x, 0)` (not a vague "consider marking something
+  dynamic"), `dtype` → "pin the dtype upstream", `stride` → "insert `x.contiguous()`".
+  Suggestions are **N2**: rejectable hints with an `evidence` trace back to the cluster
+  (category, axis, count, value transitions), never auto-applied patches; the `other`
+  (unrecognized) category yields no suggestion rather than a noisy one. They inherit the
+  cluster ranking (most-frequent recompile first). `analyze` now fills `top_suggestions`;
+  `Suggestion` grows an `evidence` field.
 - Guard clustering (Tool 1 analyzer core) — `cls_analyzer::recompile::analyze` now
   clusters a session's recompiles instead of returning `NotYetImplemented`. Following
   the describe→attribute north star (ADR-032), it parses each failed guard's structured
@@ -167,6 +176,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`x[0]` vs `x[1]`), deduped value transitions, `other`-category literal canonicalization,
   malformed-guard skipping (still counted), and determinism. `recompile_basic.rs` updated
   to the `&ClsArtifact` signature.
+- `crates/cls-analyzer/tests/recompile_suggest.rs` — 7 tests for suggestions: axis-precise
+  `mark_dynamic(x, 0)`, dtype + contiguous advice, `other` yields none, ranking by recompile
+  count, the `evidence` trace carries count + value transitions, and the empty case.
 
 ### Added
 
