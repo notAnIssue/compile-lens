@@ -11,4 +11,5 @@
 pub mod recompile;
 pub mod recompile_cluster;
 pub mod recompile_diff;
+pub mod recompile_render;
 pub mod recompile_suggest;

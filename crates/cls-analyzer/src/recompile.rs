@@ -18,6 +18,7 @@
 
 use cls_errors::ClsError;
 use cls_schema::ClsArtifact;
+use serde::Serialize;
 
 use crate::{recompile_cluster, recompile_suggest};
 
@@ -25,7 +26,7 @@ use crate::{recompile_cluster, recompile_suggest};
 ///
 /// This is the Rust-internal result type (not part of the on-disk schema, which lives in
 /// `cls-schema`), so fields can grow without an ADR-027 schema rev.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct RecompileFindings {
     /// Number of `Recompilation` events observed. Zero on an empty artifact.
     pub total_recompilations: u64,
@@ -38,7 +39,7 @@ pub struct RecompileFindings {
 }
 
 /// A cluster of recompiles attributed to one guard / dynamic axis.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GuardCategory {
     /// Coarse category — `"size"`, `"dtype"`, `"stride"`, or `"other"`. Open string for forward
     /// compat with PyTorch's guard taxonomy.
@@ -61,7 +62,7 @@ pub struct GuardCategory {
 }
 
 /// One observed guard value change (the `expected` / `actual` of a failed guard).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ValueTransition {
     pub previous: Option<String>,
     pub new: Option<String>,
@@ -69,7 +70,7 @@ pub struct ValueTransition {
 
 /// A single ranked, evidence-linked suggestion (N2: a rejectable hint, never an auto-applied
 /// patch — and every suggestion traces back to the cluster it came from).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Suggestion {
     /// Short, action-oriented text (e.g. *"mark dim 0 of `x` dynamic …"*).
     pub text: String,
@@ -85,7 +86,7 @@ pub struct Suggestion {
 /// comparison axis the single-snapshot [`RecompileFindings`] cannot express; suggestions here
 /// are **regression-anchored** ("this change introduced N recompiles on axis X → fix"), which
 /// is more defensible than a free-floating suggestion because the diff is the ground truth.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct RecompileDiff {
     /// Guard clusters present in head but not in the baseline — recompile axes this change
     /// *introduced*. The most important bucket (the regression).
@@ -102,7 +103,7 @@ pub struct RecompileDiff {
 }
 
 /// A cluster that exists in both sessions but recompiled more in head than in the baseline.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GrownCluster {
     /// The head-side cluster (its `count` is the head count).
     pub cluster: GuardCategory,
