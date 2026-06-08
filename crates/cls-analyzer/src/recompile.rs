@@ -62,7 +62,7 @@ pub struct GuardCategory {
 }
 
 /// One observed guard value change (the `expected` / `actual` of a failed guard).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct ValueTransition {
     pub previous: Option<String>,
     pub new: Option<String>,
