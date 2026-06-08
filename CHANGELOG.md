@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cl collect` is wired — the `cl` console script's `collect` subcommand now drives
+  `RecompileCollector` to write a `.cls.json` instead of printing "not implemented yet".
+  `--from-logs <path>` (Mode A) and `--from-tlparse <dir>` (Mode B) run from the CLI;
+  `--from-dynamo-explain` (Mode C) is programmatic-only and prints how to use the Python API.
+  `--output` is required and `--redaction` defaults to `default-strict` (the invocation is
+  recorded as `session.command`, scrubbed at write time). This closes the loop: `cl collect`
+  produces the artifact that `cl recompile-summary` analyzes.
 - Recompile-summary output rendering + wired CLI — `cl recompile-summary <session.cls.json>`
   now runs Tool 1 and prints a report instead of returning `NotYetImplemented`. Three
   `--format` shapes via `cls_analyzer::recompile_render`: `markdown` (default, the
