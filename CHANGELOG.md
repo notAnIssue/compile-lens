@@ -106,6 +106,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Recompile clustering value-transition dedup is now O(1) per event (was O(n²)). Distinct
+  `previous → new` transitions per cluster are collected into an `IndexSet` instead of a `Vec`
+  with a linear `contains` scan — a recompile storm can cycle through thousands of distinct
+  values, and the benchmark added in this release showed the old dedup made a 10× larger input
+  ~86× slower. Output is unchanged (same distinct transitions, same insertion order, so findings
+  stay byte-identical); 10k-event analysis dropped from ~42ms to ~3.5ms and per-event throughput
+  is now ~constant across input sizes.
 - CI workflows now use `concurrency:` — a re-push to the same PR branch
   cancels the in-flight run, saving Actions minutes during iteration. Pushes
   to `main` still run to completion.
@@ -148,6 +155,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
+- Tool 1 end-to-end integration tests + performance benchmark. `tests/integration/test_tool1_e2e.py`
+  drives the full cross-language pipeline — fixture log / tlparse dir → Python collector →
+  `.cls.json` → `cl recompile-summary --format json` → assert against each fixture's committed
+  semantic oracle (recompile count, surfaced cluster categories, raw guard text, suggestion
+  keywords) — across 5 scenarios (4 Mode-A log fixtures + 1 Mode-B tlparse dir).
+  `crates/cls-analyzer/benches/recompile_summary.rs` is a criterion benchmark over 100 / 1k / 10k
+  recompiles (throughput-reported); `crates/cls-analyzer/tests/recompile_perf.rs` is the hard
+  deterministic gate (1000-event analyze < 1s, 10k scales without going super-linear) so CI
+  catches a perf regression without running the full statistical bench.
 - `tests/fixtures/recompile/` — corpus for the Tool 1 test suite. Five real
   PyTorch session captures (`simple_batch_size.log`, `mixed_guards.log`,
   `large_storm.log`, `tlparse_output/`, `dynamo_explain_output.json`),
