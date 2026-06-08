@@ -88,6 +88,34 @@ s.report("triage.html")   # one HTML, every tool's findings
 cl session report ./.compile-lens/<session-id>/   # same data, CLI form
 ```
 
+### Tool 1 — `recompile-summary` (working now)
+
+The first tool is wired end-to-end. Given a collected `.cls.json`, it attributes each
+recompilation to the **dynamic axis** that caused it and emits an axis-precise fix:
+
+```bash
+cl recompile-summary session.cls.json
+```
+
+```
+## Recompile Summary
+
+Total recompilations: 3
+Triggered by: 3 distinct guard categories
+  ├ dtype · `x` (1 event — values Float→Double)
+  ├ size · `x[0]` (1 event — values 8→16)
+  └ stride · `x[0]` (1 event — values 4→1)
+
+### Top suggestions
+
+1. `x`'s dtype changes across calls, forcing a fresh compile each time — pin it (cast once) upstream of the compiled region.
+2. `x` dim 0 keeps changing size — mark it dynamic to stop the recompiles: `torch._dynamo.mark_dynamic(x, 0)` (or compile with `dynamic=True`).
+3. `x` is non-contiguous on some calls — insert `x = x.contiguous()` before the compiled region so its layout is stable.
+```
+
+`--format json` for CI, `--baseline main.cls.json` for a regression diff. Full reference:
+[**Tool 1 — recompile-summary**](./docs/03_tools/recompile_summary.md).
+
 ---
 
 ## Documentation

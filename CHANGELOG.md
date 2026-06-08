@@ -146,6 +146,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- `docs/03_tools/recompile_summary.md` — Tool 1 user guide (Part A theory & reference:
+  describe→attribute→prescribe, the three collection modes, guard categories, findings shape;
+  Part B examples: Markdown/JSON/`--baseline` diff CLI, Python collector API, a GitHub Action
+  regression-guard template — all runnable against the committed `schema/examples/`; Part C FAQ,
+  limitations, and the "PyTorch nightly changed the log format" failure case). README gains a
+  working `recompile-summary` demo with real output.
 - ADR-029 — *defer Tool 1 schema-field refinement to v0.6*. Phase 1's
   schema audit found one missing field (`FailedGuard.source_location`) and
   one nice-to-have (`FailedGuard.category`); both are deferred to the v0.6
