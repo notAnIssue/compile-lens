@@ -9,4 +9,6 @@ rust-version.workspace = true
 cls-errors = { path = "../cls-errors" }
 cls-schema = { path = "../cls-schema" }
 indexmap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }

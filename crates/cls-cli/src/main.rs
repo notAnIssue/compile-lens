@@ -70,12 +70,18 @@ enum Command {
     },
 
     /// Render the Tool 1 recompile aggregator's analysis of a collected
-    /// session into a human- or machine-readable report. The analyzer
-    /// itself lands in upcoming Phase 1 PRs; right now the subcommand
-    /// parses arguments and exits with `NotYetImplemented`.
+    /// session into a human- or machine-readable report. With `--baseline`
+    /// it instead diffs the session against an earlier one and reports the
+    /// recompiles this change introduced / worsened / fixed (regression mode).
     RecompileSummary {
-        /// The `.cls.json` artifact to analyze.
+        /// The `.cls.json` artifact to analyze (the "head" session in diff mode).
         session: std::path::PathBuf,
+
+        /// Optional earlier `.cls.json` to diff against. When given, the output
+        /// is a regression diff (added / grown / removed recompile clusters)
+        /// rather than a single-session summary.
+        #[arg(long, value_name = "PATH")]
+        baseline: Option<std::path::PathBuf>,
 
         /// Output format. `markdown` is the default human-readable shape;
         /// `json` is machine-readable; `text` is plain console output for
@@ -114,12 +120,24 @@ enum RedactionLevel {
     PublicSafe,
 }
 
-/// Output format for `cl recompile-summary --format`.
+/// Output format for `cl recompile-summary --format`. Maps onto the analyzer's
+/// presentation-agnostic [`cls_analyzer::recompile_render::Format`]; kept as a separate
+/// clap `ValueEnum` so the analyzer crate stays free of any CLI dependency.
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum SummaryFormat {
     Markdown,
     Json,
     Text,
+}
+
+impl From<SummaryFormat> for cls_analyzer::recompile_render::Format {
+    fn from(f: SummaryFormat) -> Self {
+        match f {
+            SummaryFormat::Markdown => Self::Markdown,
+            SummaryFormat::Json => Self::Json,
+            SummaryFormat::Text => Self::Text,
+        }
+    }
 }
 
 /// Install a global tracing subscriber from `CLS_LOG` / `CLS_LOG_FORMAT`.
@@ -186,8 +204,9 @@ fn run(cli: Cli) -> Result<(), ClsError> {
 
         Some(Command::RecompileSummary {
             session,
-            format: _format,
-        }) => recompile_summary(session),
+            baseline,
+            format,
+        }) => recompile_summary(session, baseline, format),
 
         Some(Command::Migrate {
             input,
@@ -249,17 +268,39 @@ fn collect(
     })
 }
 
-/// `cl recompile-summary` skeleton. Validates the session path; the
-/// analyzer itself lands in upcoming Phase 1 PRs.
-fn recompile_summary(session: std::path::PathBuf) -> Result<(), ClsError> {
-    std::fs::metadata(&session).map_err(|source| ClsError::IoError {
-        path: session.display().to_string(),
-        source,
-    })?;
-    Err(ClsError::NotYetImplemented {
-        surface: "cl recompile-summary".into(),
-        tracking: "Phase 1 (Tool 1)".into(),
-    })
+/// `cl recompile-summary` — load a session artifact, run Tool 1, and print the report.
+///
+/// Two modes share one loader (`cls_schema_migrate::load_artifact`, the ADR-033 §5
+/// baseline-pairing seam, which reads + version-gates + deserializes):
+/// - no `--baseline`: [`cls_analyzer::recompile::analyze`] → single-session summary.
+/// - `--baseline B`: load `B` too and [`cls_analyzer::recompile_diff::diff_recompiles`]
+///   `(base, head)` → regression diff.
+///
+/// The chosen `--format` is mapped onto the analyzer's render `Format` and the rendered
+/// string is written to stdout (machine-readable `json` and the human shapes alike go to
+/// stdout; only diagnostics use stderr).
+fn recompile_summary(
+    session: std::path::PathBuf,
+    baseline: Option<std::path::PathBuf>,
+    format: SummaryFormat,
+) -> Result<(), ClsError> {
+    let head = cls_schema_migrate::load_artifact(&session)?;
+    let render_format = format.into();
+
+    let rendered = match baseline {
+        Some(base_path) => {
+            let base = cls_schema_migrate::load_artifact(&base_path)?;
+            let diff = cls_analyzer::recompile_diff::diff_recompiles(&base, &head);
+            cls_analyzer::recompile_render::render_diff(&diff, render_format)
+        }
+        None => {
+            let findings = cls_analyzer::recompile::analyze(&head)?;
+            cls_analyzer::recompile_render::render_findings(&findings, render_format)
+        }
+    };
+
+    print!("{rendered}");
+    Ok(())
 }
 
 /// `cl migrate` — unchanged from v0.5.0; kept under `run` so the dispatch

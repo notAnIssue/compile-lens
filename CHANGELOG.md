@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Recompile-summary output rendering + wired CLI — `cl recompile-summary <session.cls.json>`
+  now runs Tool 1 and prints a report instead of returning `NotYetImplemented`. Three
+  `--format` shapes via `cls_analyzer::recompile_render`: `markdown` (default, the
+  human-readable summary from the design doc — total + per-axis guard clusters with their
+  value transitions + ranked suggestions), `json` (the findings struct serialized verbatim,
+  the machine-readable contract), and `text` (plain layout for non-Markdown terminals).
+  Adding `--baseline <earlier.cls.json>` switches to the regression diff (added / grown /
+  removed clusters). Both modes share one loader, `cls_schema_migrate::load_artifact` — the
+  read + schema-version-gate + parse seam reused by the `--baseline` load and the future
+  compile-diff tool, so artifact loading has one home. Rendering lives only in
+  `recompile_render` (the analyzer returns plain data; presentation is a separate concern).
 - Session-to-session recompile diff (Tool 1 regression mode) — `cls_analyzer::recompile_diff::diff_recompiles(base, head)`
   answers the comparison-axis question the single-snapshot analyzer can't: *what did
   this commit/PR change about recompile behaviour vs a baseline?* It clusters both

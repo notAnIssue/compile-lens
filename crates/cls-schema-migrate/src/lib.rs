@@ -22,6 +22,7 @@
 //! noted in that section).
 
 use cls_errors::ClsError;
+use cls_schema::ClsArtifact;
 use std::path::Path;
 
 /// Schema version this binary currently treats as "current".
@@ -78,4 +79,27 @@ pub fn migrate_to_current(input_path: &Path, output_path: &Path) -> Result<(), C
         source,
     })?;
     Ok(())
+}
+
+/// Read a `.cls.json` from disk, verify its schema version, and fully deserialize it
+/// into a [`ClsArtifact`].
+///
+/// This is the **shared baseline-pairing seam** (ADR-033 §5): any analyzer that needs a
+/// *parsed* artifact off disk — `cl recompile-summary` loading its session, the same
+/// command loading a `--baseline` for the regression diff, and the future cross-session
+/// tool that pairs a base and head — goes through this one loader so the read +
+/// version-gate + parse policy stays in one place rather than re-derived per call site.
+///
+/// Distinct from [`detect_schema_version`], which deliberately does *not* deserialize the
+/// whole artifact (so it can inspect foreign versions cheaply). Here we want the typed
+/// model, so we version-gate first (turning a mismatch into the actionable
+/// [`ClsError::SchemaVersionMismatch`] / `CLS-E0003` rather than a noisy serde error) and
+/// then parse into [`ClsArtifact`].
+pub fn load_artifact(path: &Path) -> Result<ClsArtifact, ClsError> {
+    detect_schema_version(path)?;
+    let text = std::fs::read_to_string(path).map_err(|source| ClsError::IoError {
+        path: path.display().to_string(),
+        source,
+    })?;
+    serde_json::from_str(&text).map_err(|source| ClsError::SchemaParseError { source })
 }
