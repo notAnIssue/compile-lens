@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.1] — 2026-06-08
+
+Tool 1 (`recompile-summary`) complete: collect → analyze → render, end-to-end from the CLI,
+with a regression-diff mode and a perf-characterized analyzer. (Still pre-MVP — v0.5.0 also
+needs Tool 2a + the hero form.)
+
 ### Added
 
 - `cl collect` is wired — the `cl` console script's `collect` subcommand now drives
