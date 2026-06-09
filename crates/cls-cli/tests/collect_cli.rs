@@ -152,3 +152,74 @@ fn recompile_summary_nonexistent_session_exits_three() {
         String::from_utf8_lossy(&out.stderr),
     );
 }
+
+#[test]
+fn diff_help_lists_base_and_head() {
+    let out = cl().arg("diff").arg("--help").output().expect("spawn cl");
+    let help = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "exit: {:?}", out.status);
+    assert!(help.contains("--base"), "help missing --base");
+    assert!(help.contains("--head"), "help missing --head");
+    assert!(help.contains("--format"), "help missing --format");
+}
+
+#[test]
+fn diff_nonexistent_base_exits_three() {
+    // `--base` points at a missing file → CLS-E0001 (IoError) → exit 3, before the
+    // not-yet-implemented branch. (Both inputs are validated; base is checked first.)
+    let out = cl()
+        .arg("diff")
+        .arg("--base")
+        .arg("/nonexistent/base.cls.json")
+        .arg("--head")
+        .arg("/nonexistent/head.cls.json")
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "expected exit 3 (CLS-E0001), got {:?}; stderr:\n{}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("CLS-E0001"),
+        "diagnostic missing CLS-E0001 marker"
+    );
+}
+
+#[test]
+fn diff_with_existing_inputs_exits_not_yet_implemented() {
+    // Both inputs reachable → falls through to NotYetImplemented (CLS-E0011) → exit 13.
+    let base = std::env::temp_dir().join(format!("cls_diff_base_{}.cls.json", std::process::id()));
+    let head = std::env::temp_dir().join(format!("cls_diff_head_{}.cls.json", std::process::id()));
+    std::fs::write(&base, b"{}").expect("write base");
+    std::fs::write(&head, b"{}").expect("write head");
+
+    let out = cl()
+        .arg("diff")
+        .arg("--base")
+        .arg(&base)
+        .arg("--head")
+        .arg(&head)
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn cl");
+
+    let _ = std::fs::remove_file(&base);
+    let _ = std::fs::remove_file(&head);
+
+    assert_eq!(
+        out.status.code(),
+        Some(13),
+        "expected exit 13 (CLS-E0011), got {:?}; stderr:\n{}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("cl diff"),
+        "diagnostic should name the unimplemented surface"
+    );
+}
