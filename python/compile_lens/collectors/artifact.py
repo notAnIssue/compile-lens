@@ -23,6 +23,7 @@ the capture path; constructing the collector and finalizing an artifact never im
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,8 @@ from compile_lens._schema import (
     ClsArtifact,
     CompiledGraph,
     FxNode,
+    InternalStateSnapshot,
+    Iteration,
     RedactionPolicy,
     Session,
     to_json,
@@ -116,6 +119,86 @@ def _serialize_node(node: Any, node_cls: type) -> FxNode:
     return FxNode(**fields)
 
 
+# ── per-iteration runtime capture ───────────────────────────────────────────────────────
+# These read a run's output and a module's mutable state to detect cache behaviour and
+# attribute drift across iterations. torch is duck-typed (these run only inside ``capture``).
+
+
+def _tensor_bytes(value: Any) -> bytes:
+    """Raw bytes of a single CPU tensor's contiguous storage. NumPy-free (it may be absent),
+    so we read the untyped storage directly rather than going through ``.numpy()``."""
+    contiguous = value.detach().cpu().contiguous()
+    return bytes(contiguous.untyped_storage())
+
+
+def _output_signature(output: Any) -> str | None:
+    """A sha256 over all tensors in a run's output, in order. Deterministic for the same input
+    (so a stable signature across iterations means the compiled graph produced identical output),
+    and sensitive to any value change. Flattens nested tuples/lists; returns ``None`` if the
+    output holds no tensors (nothing to fingerprint)."""
+
+    def _walk(value: Any, sink: list[bytes]) -> None:
+        if hasattr(value, "detach") and hasattr(value, "untyped_storage"):
+            sink.append(_tensor_bytes(value))
+        elif isinstance(value, tuple | list):
+            for item in value:
+                _walk(item, sink)
+        elif isinstance(value, dict):
+            for item in value.values():
+                _walk(item, sink)
+
+    chunks: list[bytes] = []
+    _walk(output, chunks)
+    if not chunks:
+        return None
+    digest = hashlib.sha256()
+    for chunk in chunks:
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _scalar_attrs(module: Any) -> dict[str, Any]:
+    """The module's user-set scalar attributes (the mutable state a forward might drift). Reads
+    the public, scalar entries of ``__dict__`` only — torch's private ``_parameters`` / ``_buffers``
+    bookkeeping and non-scalar attributes are excluded."""
+    return {
+        key: val for key, val in vars(module).items() if not key.startswith("_") and _is_scalar(val)
+    }
+
+
+def _module_snapshot(fn: Any, previous: dict[str, Any] | None) -> tuple[Any, dict[str, Any] | None]:
+    """Snapshot an nn.Module's mutable state for one iteration.
+
+    Returns ``(snapshot_or_None, scalar_attrs_or_None)``: an :class:`InternalStateSnapshot` with a
+    hash over the module's buffers (sorted by name for determinism) and the list of scalar
+    attributes whose value changed since ``previous``; plus this iteration's scalar attrs to thread
+    into the next call. A plain function (no module state) yields ``(None, None)``.
+    """
+    import torch  # noqa: PLC0415
+
+    if not isinstance(fn, torch.nn.Module):
+        return None, None
+
+    digest = hashlib.sha256()
+    for name, buffer in sorted(fn.named_buffers(), key=lambda kv: kv[0]):
+        digest.update(name.encode())
+        digest.update(_tensor_bytes(buffer))
+    buffers_hash = digest.hexdigest() if any(True for _ in fn.named_buffers()) else None
+
+    attrs = _scalar_attrs(fn)
+    changed = (
+        sorted(k for k, v in attrs.items() if previous.get(k) != v) if previous is not None else []
+    )
+
+    fields: dict[str, Any] = {}
+    if buffers_hash is not None:
+        fields["module_buffers_hash"] = buffers_hash
+    if changed:
+        fields["module_attrs_changed"] = changed
+    snapshot = InternalStateSnapshot(**fields) if fields else None
+    return snapshot, attrs
+
+
 class CompileArtifactCollector:
     """Captures compiled FX graphs and writes a schema-valid ``.cls.json``.
 
@@ -148,6 +231,7 @@ class CompileArtifactCollector:
         self._timestamp = timestamp
         self._torch_version = torch_version
         self._compiled_graphs: list[CompiledGraph] = []
+        self._iterations: list[Iteration] = []
 
     # ── capture ──────────────────────────────────────────────────────────────────────
     def add_graph_module(self, graph_module: Any) -> None:
@@ -176,15 +260,47 @@ class CompileArtifactCollector:
         compile_backend: Callable[..., Any] = aot_autograd(fw_compiler=_forward_compiler)
         return compile_backend
 
-    def capture(self, fn: Any, *args: Any, **kwargs: Any) -> None:
-        """Compile ``fn`` with the capturing backend and run it once under ``no_grad`` so the
-        graph is traced and serialized. ``fn`` may be a module or a plain callable; pass a
-        function whose compilation has not been cached elsewhere so the backend is invoked."""
+    def capture(self, fn: Any, *args: Any, iterations: int = 1, **kwargs: Any) -> None:
+        """Compile ``fn`` with the capturing backend and run it ``iterations`` times under
+        ``no_grad``, recording the FX graph once and a per-run :class:`Iteration` each time.
+
+        ``fn`` may be a module or a plain callable; pass one whose compilation has not been cached
+        elsewhere so the backend is invoked. Each iteration records:
+
+        - **cache_hit / recompilation_triggered** — detected by whether this run drove a new
+          compile (the capturing backend fires). The first run compiles (neither a hit nor a
+          recompile); a later run with the same input shapes is a cache hit; a later run that
+          recompiles (e.g. a shape change) is a recompilation.
+        - **output_signature** — a sha256 over the run's output tensors; stable across iterations
+          means identical output.
+        - **internal_state_snapshot** — for an nn.Module, a hash of its buffers plus the scalar
+          attributes that changed since the previous iteration (drift detection).
+
+        guard-evaluation capture is deliberately left for a later change (it needs dynamo guard
+        internals); the iteration's ``guard_evaluations`` stays empty for now.
+        """
         import torch  # noqa: PLC0415
 
         compiled = torch.compile(fn, backend=self.backend())
+        previous_attrs: dict[str, Any] | None = None
         with torch.no_grad():
-            compiled(*args, **kwargs)
+            for index in range(iterations):
+                graphs_before = len(self._compiled_graphs)
+                output = compiled(*args, **kwargs)
+                compiled_this_run = len(self._compiled_graphs) > graphs_before
+
+                snapshot, previous_attrs = _module_snapshot(fn, previous_attrs)
+                fields: dict[str, Any] = {
+                    "iteration_index": index,
+                    "cache_hit": not compiled_this_run,
+                    "recompilation_triggered": compiled_this_run and index > 0,
+                }
+                signature = _output_signature(output)
+                if signature is not None:
+                    fields["output_signature"] = signature
+                if snapshot is not None:
+                    fields["internal_state_snapshot"] = snapshot
+                self._iterations.append(Iteration(**fields))
 
     # ── serialization ──────────────────────────────────────────────────────────────────
     def _build_session(self) -> Session:
@@ -221,10 +337,16 @@ class CompileArtifactCollector:
                         graph.inductor_ir_path, repo=repo
                     )
 
+        # iterations defaults to [] in the schema; pass it only when non-empty so the
+        # exclude_unset serializer keeps a structure-only capture byte-identical to before.
+        optional: dict[str, list[Iteration]] = (
+            {"iterations": self._iterations} if self._iterations else {}
+        )
         artifact = ClsArtifact(
             schema_version=SCHEMA_VERSION,
             session=self._build_session(),
             compiled_graphs=self._compiled_graphs,
+            **optional,
         )
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(to_json(artifact))
@@ -232,6 +354,7 @@ class CompileArtifactCollector:
             "artifact_collector.finalize",
             output_path=str(self.output_path),
             compiled_graphs=len(self._compiled_graphs),
+            iterations=len(self._iterations),
             redaction_policy=str(self.redaction_policy),
         )
         return self.output_path
