@@ -1,0 +1,26 @@
+{
+  "description": "every node id is renamed (n* -> m*) but the structure is byte-for-byte identical.",
+  "added": [],
+  "removed": [],
+  "modified": [],
+  "matched": [
+    [
+      "n0",
+      "m0"
+    ],
+    [
+      "n1",
+      "m1"
+    ],
+    [
+      "n2",
+      "m2"
+    ],
+    [
+      "n3",
+      "m3"
+    ]
+  ],
+  "known_limitation": true,
+  "note": "Semantically a pure rename: zero structural change, all nodes matched. KNOWN LIMITATION: the WL-signature algorithm may misclassify this as a full add+remove, because the SSA name change ripples into consumer signatures. This fixture records the correct interpretation; downstream tests treat it as a documented-limitation example, not a hard pass. It is the worked failure case the Tool 2a docs must show."
+}

@@ -282,6 +282,10 @@ version = "0.5.0"
 [[package]]
 name = "cls-wl-diff"
 version = "0.5.0"
+dependencies = [
+ "cls-schema",
+ "serde_json",
+]
 
 [[package]]
 name = "colorchoice"

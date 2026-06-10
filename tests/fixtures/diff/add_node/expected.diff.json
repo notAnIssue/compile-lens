@@ -1,0 +1,9 @@
+{
+  "description": "head appends one relu node consuming the add result; everything else identical.",
+  "added": [
+    "n3"
+  ],
+  "removed": [],
+  "modified": [],
+  "note": "Smallest add case: exactly one node appears in head and nothing existing is rewired."
+}

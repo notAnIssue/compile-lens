@@ -1,0 +1,7 @@
+{
+  "description": "commutative add: operands swapped from (n0, n1) to (n1, n0).",
+  "added": [],
+  "removed": [],
+  "modified": [],
+  "note": "KEY CASE, the counterpart to operand_swap_*. add is commutative, so a + b == b + a. Reordering operands is semantically identical and MUST produce an empty diff. The algorithm sorts input signatures for ops on the commutativity whitelist, so this stays silent. This is the must-stay-silent half of the operand-order regression guarantee."
+}
