@@ -258,6 +258,6 @@ def test_module_attrs_changed_detected(tmp_path: Path) -> None:
 
     # The first iteration has no previous to diff against; later iterations see `step` change.
     later = [it for it in iterations[1:] if it.internal_state_snapshot is not None]
-    assert any(
-        "step" in it.internal_state_snapshot.module_attrs_changed for it in later
-    ), "module attribute drift should be detected after the first iteration"
+    assert any("step" in it.internal_state_snapshot.module_attrs_changed for it in later), (
+        "module attribute drift should be detected after the first iteration"
+    )
