@@ -284,6 +284,7 @@ name = "cls-wl-diff"
 version = "0.5.0"
 dependencies = [
  "cls-schema",
+ "indexmap",
  "serde_json",
 ]
 
