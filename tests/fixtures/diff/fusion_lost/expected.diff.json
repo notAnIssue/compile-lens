@@ -1,0 +1,12 @@
+{
+  "description": "base has a single fused addmm node; head expresses the same math as separate mm then add.",
+  "added": [
+    "na",
+    "nb"
+  ],
+  "removed": [
+    "nf"
+  ],
+  "modified": [],
+  "note": "A fused op (addmm = add(n0, mm(n1, n2))) in base is decomposed into mm + add in head. Modeled as remove(fused) + add(constituents) because no single base node aligns to a single head node. Simplified representation: real fusion happens in the Inductor pass, but at the FX node level this captures the structural shape the diff must report."
+}

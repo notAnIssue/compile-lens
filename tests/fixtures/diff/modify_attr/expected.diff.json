@@ -1,0 +1,9 @@
+{
+  "description": "the add node keeps its op_type and operands but changes its alpha attribute (a*1 + b vs a*2 + b).",
+  "added": [],
+  "removed": [],
+  "modified": [
+    "n2"
+  ],
+  "note": "Same structure, different attrs -> classified modified, not add+remove. Exercises the attrs field of the contract."
+}

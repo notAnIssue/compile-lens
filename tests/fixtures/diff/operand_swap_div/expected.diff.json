@@ -1,0 +1,9 @@
+{
+  "description": "non-commutative aten.div: operands swapped from (n0, n1) to (n1, n0).",
+  "added": [],
+  "removed": [],
+  "modified": [
+    "n2"
+  ],
+  "note": "KEY CASE. aten.div is non-commutative, so swapping operands changes the result. The diff MUST classify n2 as modified. A naive algorithm that sorts inputs would produce an identical signature and miss this (a silent diff bug). This is why the contract stores inputs as an ordered sequence (ADR-024) and the signature preserves operand order for non-commutative ops. This is the must-detect half of the operand-order regression guarantee."
+}
