@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `cl diff` subcommand skeleton (Tool 2a — compile-diff). Parses `--base` / `--head`
+  (both required) and `--format`, validates both artifact paths are reachable (a missing
+  one reports `CLS-E0001`), and exits with the typed `NotYetImplemented` (`CLS-E0011`) until
+  the WL-signature diff algorithm lands in the upcoming Phase 2 PRs — mirroring how the
+  Tool 1 subcommands were stubbed before their analyzers existed. (The `--include-cache-stability`
+  flag is intentionally **not** added yet — its logic is Tool 2b in a later phase.)
+
 ## [0.5.0-alpha.1] — 2026-06-08
 
 Tool 1 (`recompile-summary`) complete: collect → analyze → render, end-to-end from the CLI,
