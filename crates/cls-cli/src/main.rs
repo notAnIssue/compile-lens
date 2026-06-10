@@ -90,6 +90,28 @@ enum Command {
         format: SummaryFormat,
     },
 
+    /// Diff two collected sessions' compiled graphs (Tool 2a — WL-signature
+    /// neighborhood diff). Reports the nodes a change added / removed / modified
+    /// between a `--base` and a `--head` artifact. The diff algorithm lands in
+    /// the upcoming Phase 2 PRs; right now the subcommand parses arguments,
+    /// verifies both input paths are reachable, and exits with the typed
+    /// `NotYetImplemented` error.
+    Diff {
+        /// The baseline `.cls.json` artifact (the "before" side).
+        #[arg(long, value_name = "PATH")]
+        base: std::path::PathBuf,
+
+        /// The head `.cls.json` artifact (the "after" side).
+        #[arg(long, value_name = "PATH")]
+        head: std::path::PathBuf,
+
+        /// Output format. `markdown` is the default human-readable shape;
+        /// `json` is machine-readable; `text` is plain console output for
+        /// terminals that can't render Markdown.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -208,6 +230,8 @@ fn run(cli: Cli) -> Result<(), ClsError> {
             format,
         }) => recompile_summary(session, baseline, format),
 
+        Some(Command::Diff { base, head, format }) => diff(base, head, format),
+
         Some(Command::Migrate {
             input,
             output,
@@ -301,6 +325,28 @@ fn recompile_summary(
 
     print!("{rendered}");
     Ok(())
+}
+
+/// `cl diff` skeleton (Tool 2a). Validates that both the `--base` and `--head`
+/// artifacts are reachable, then exits with the typed `NotYetImplemented` error.
+/// The WL-signature diff algorithm (`cls-wl-diff`) lands in upcoming Phase 2 PRs.
+fn diff(
+    base: std::path::PathBuf,
+    head: std::path::PathBuf,
+    _format: SummaryFormat,
+) -> Result<(), ClsError> {
+    // Verify both inputs now so a typo surfaces as the typed `IoError` (CLS-E0001,
+    // exit 3) instead of getting swallowed by the not-yet-implemented branch.
+    for path in [&base, &head] {
+        std::fs::metadata(path).map_err(|source| ClsError::IoError {
+            path: path.display().to_string(),
+            source,
+        })?;
+    }
+    Err(ClsError::NotYetImplemented {
+        surface: "cl diff".into(),
+        tracking: "Phase 2 (Tool 2a)".into(),
+    })
 }
 
 /// `cl migrate` — unchanged from v0.5.0; kept under `run` so the dispatch
