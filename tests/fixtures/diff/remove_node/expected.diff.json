@@ -1,0 +1,9 @@
+{
+  "description": "head drops the trailing relu node; everything else identical.",
+  "added": [],
+  "removed": [
+    "n3"
+  ],
+  "modified": [],
+  "note": "Mirror of add_node: exactly one base node is absent from head."
+}
