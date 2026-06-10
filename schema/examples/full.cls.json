@@ -69,7 +69,13 @@
       "inductor_ir_path": "<scrubbed>",
       "guard_list": ["g_001", "g_002"],
       "kernel_ids": ["k_001"],
-      "compile_phases_summary": { "total_ms": 45230 }
+      "compile_phases_summary": { "total_ms": 45230 },
+      "nodes": [
+        { "id": "n0", "op_type": "placeholder" },
+        { "id": "n1", "op_type": "placeholder" },
+        { "id": "n2", "op_type": "aten.sub", "inputs": ["n0", "n1"], "attrs": { "alpha": 1 } },
+        { "id": "n3", "op_type": "output", "inputs": ["n2"] }
+      ]
     }
   ],
   "compile_phases": [

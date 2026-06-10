@@ -112,6 +112,20 @@ class Recompilation(_Model):
     wall_clock_ms: float | None = None
 
 
+class FxNode(_Model):
+    #: Graph-unique node id; other nodes reference it in their ``inputs`` to encode an edge.
+    id: str
+    #: The operation, e.g. ``aten.matmul`` or a ``call_function`` target.
+    op_type: str
+    #: Ordered ids of the upstream nodes this one consumes. Order is load-bearing:
+    #: ``sub(a, b)`` and ``sub(b, a)`` differ only here, so operand-order regressions are
+    #: detectable only because the sequence is preserved rather than treated as a set.
+    inputs: list[str] = Field(default_factory=list)
+    #: Node attributes (a constant's value, a dim parameter, …); a difference here makes the
+    #: diff classify an otherwise-identical node as ``modified``.
+    attrs: dict[str, Any] = Field(default_factory=dict)
+
+
 class CompiledGraph(_Model):
     graph_id: str
     compiled_function_id: str | None = None
@@ -120,6 +134,9 @@ class CompiledGraph(_Model):
     guard_list: list[str] = Field(default_factory=list)
     kernel_ids: list[str] = Field(default_factory=list)
     compile_phases_summary: dict[str, Any] = Field(default_factory=dict)
+    #: Node-level FX graph structure for the WL-signature diff (Tool 2a, ADR-024). Inlined so
+    #: a single ``.cls.json`` stays self-contained; optional and forward-compatible.
+    nodes: list[FxNode] = Field(default_factory=list)
 
 
 class CompilePhase(_Model):

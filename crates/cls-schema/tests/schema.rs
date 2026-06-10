@@ -110,6 +110,54 @@ fn test_kernel_features_num_regs_present() {
     assert_eq!(features.n_spills, Some(0));
 }
 
+// ── test_fx_nodes_parse_with_ordered_inputs ─────────────────────────────────────────────
+#[test]
+fn test_fx_nodes_parse_with_ordered_inputs() {
+    let artifact = parse(FULL);
+    let nodes = &artifact.compiled_graphs[0].nodes;
+    assert_eq!(nodes.len(), 4);
+
+    // A required-only node: no inputs, no attrs.
+    assert_eq!(nodes[0].id, "n0");
+    assert_eq!(nodes[0].op_type, "placeholder");
+    assert!(nodes[0].inputs.is_empty());
+    assert!(nodes[0].attrs.is_empty());
+
+    // The sub node carries inputs in load-bearing order (n0 before n1) plus an attr.
+    let sub = &nodes[2];
+    assert_eq!(sub.op_type, "aten.sub");
+    assert_eq!(sub.inputs, vec!["n0", "n1"]);
+    assert_eq!(sub.attrs.get("alpha").and_then(|v| v.as_i64()), Some(1));
+
+    // Operand order is preserved as a sequence, not normalized to a set: reversing it is a
+    // genuinely different node, which is exactly what the WL diff relies on.
+    assert_ne!(sub.inputs, vec!["n1", "n0"]);
+}
+
+// ── test_fx_nodes_absent_when_not_captured ──────────────────────────────────────────────
+#[test]
+fn test_fx_nodes_absent_when_not_captured() {
+    // A graph written before node capture (the minimal artifact has none) parses fine: the
+    // field is optional and defaults to empty rather than erroring.
+    let artifact = parse(MINIMAL);
+    assert!(artifact.compiled_graphs.is_empty());
+
+    // And an empty `nodes` is omitted on re-serialize (skip_serializing_if), so a Tool 1
+    // artifact does not grow a spurious `"nodes":[]`.
+    let graph = cls_schema::CompiledGraph {
+        graph_id: "g".into(),
+        compiled_function_id: None,
+        fx_graph_path: None,
+        inductor_ir_path: None,
+        guard_list: Vec::new(),
+        kernel_ids: Vec::new(),
+        compile_phases_summary: Default::default(),
+        nodes: Vec::new(),
+    };
+    let json = serde_json::to_string(&graph).unwrap();
+    assert!(!json.contains("nodes"));
+}
+
 // ── test_session_round_trip_serde ───────────────────────────────────────────────────────
 #[test]
 fn test_session_round_trip_serde() {
