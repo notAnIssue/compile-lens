@@ -78,6 +78,41 @@ impl FxGraph {
         }
     }
 
+    /// op_type of a node by id, or `None` if the id is not in the graph.
+    pub(crate) fn op_type_of(&self, id: &str) -> Option<&str> {
+        self.index_of
+            .get(id)
+            .map(|&pos| self.nodes[pos].op_type.as_str())
+    }
+
+    /// The node's input ids in operand order (empty if the id is unknown). Some entries may
+    /// reference values not present in this graph; callers filter as needed.
+    pub(crate) fn inputs_of(&self, id: &str) -> &[String] {
+        self.index_of
+            .get(id)
+            .map(|&pos| self.nodes[pos].inputs.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Ids of the nodes that consume this node's output, in node order.
+    pub(crate) fn consumers_of(&self, id: &str) -> Vec<&str> {
+        self.index_of
+            .get(id)
+            .map(|&pos| {
+                self.consumers[pos]
+                    .iter()
+                    .map(|&c| self.nodes[c].id.as_str())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The operand position at which `producer` feeds `consumer`, or `None` if it does not (or
+    /// either id is unknown). When a producer feeds a consumer more than once, the first position.
+    pub(crate) fn input_position(&self, consumer: &str, producer: &str) -> Option<usize> {
+        self.inputs_of(consumer).iter().position(|i| i == producer)
+    }
+
     /// Compute every node's WL-signature, returned as id → signature in node order.
     ///
     /// Deterministic: same graph in, byte-identical signatures out (it uses a fixed-key hasher and
