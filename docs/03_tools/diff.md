@@ -128,38 +128,38 @@ c.finalize()
 
 ### The diff
 
-The matcher is implemented as a pure function in the `cls-wl-diff` library —
-`diff_graphs(before, after) -> IrGraphDiff`, deterministic and torch-free. For a concrete edit —
-a model whose `head` inserts one `relu` that `base` did not have — `diff_graphs` reports:
-
-```
-added:    ["relu"]          # the new node
-removed:  []
-modified: []
-match_coverage: 1.0         # every base node matched
+```bash
+cl diff --base before.cls.json --head after.cls.json --format markdown
 ```
 
 For a non-commutative operand swap — `head` computes `sub(b, a)` where `base` computed `sub(a, b)`:
 
+```markdown
+## Compile Diff
+
+0 added · 0 removed · 1 modified · 3 matched
+
+### Modified
+- `n2`
+
+_match coverage 1.00 · anchor uniqueness 1.00_
 ```
-added:    []
-removed:  []
-modified: [("sub", "sub")]  # same node, operands reordered
-```
 
-> **Surface status.** The matcher and its `IrGraphDiff` are complete in the library and gated in CI.
-> The `cl diff --base before.cls.json --head after.cls.json --format markdown|json|text` command
-> currently parses its arguments and validates the paths but returns `NotYetImplemented` (`CLS-E0011`)
-> — rendering the `IrGraphDiff` to those formats, and a Python binding, land in a later release. This
-> page documents the algorithm and its output; the command-line and CI-action surfaces below describe
-> the intended shape, not yet-shipped behavior.
+`--format json` emits the whole `IrGraphDiff` (the machine-readable contract — `added` / `removed` /
+`modified`, the `matched` triples with their confidence, `match_coverage`, `anchor_uniqueness_ratio`);
+`--format text` is the same summary in plain console output. The matcher is also a pure library
+function — `cls_wl_diff::diff_graphs(before, after) -> IrGraphDiff`, deterministic and torch-free — if
+you want to embed it rather than shell out.
 
-### GitHub Action (intended shape)
+> A Python binding for the diff is not yet shipped; today the surfaces are the `cl diff` command and
+> the Rust library function above.
 
-Once `cl diff` renders, a regression gate looks like:
+### GitHub Action
+
+Gate a PR on the compile diff by writing the Markdown into the job summary:
 
 ```yaml
-# .github/workflows/compile-diff.yml  (designed-for; cl diff rendering lands later)
+# .github/workflows/compile-diff.yml
 - run: cl diff --base baseline.cls.json --head pr.cls.json --format markdown >> "$GITHUB_STEP_SUMMARY"
 ```
 
