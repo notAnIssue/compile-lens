@@ -113,6 +113,22 @@ impl FxGraph {
         self.inputs_of(consumer).iter().position(|i| i == producer)
     }
 
+    /// All node ids, in node order.
+    pub(crate) fn node_ids(&self) -> impl Iterator<Item = &str> {
+        self.nodes.iter().map(|n| n.id.as_str())
+    }
+
+    /// Number of nodes in the graph.
+    pub(crate) fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// A node's attributes (the `attrs` map), or `None` if the id is unknown. Two structurally
+    /// matched nodes whose attrs differ are what residual classification calls `modified`.
+    pub(crate) fn attrs_of(&self, id: &str) -> Option<&cls_schema::JsonMap> {
+        self.index_of.get(id).map(|&pos| &self.nodes[pos].attrs)
+    }
+
     /// Compute every node's WL-signature, returned as id → signature in node order.
     ///
     /// Deterministic: same graph in, byte-identical signatures out (it uses a fixed-key hasher and
