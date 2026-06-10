@@ -18,12 +18,14 @@ fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/diff")
 }
 
-/// Every scenario subdirectory (skips the README and any stray files).
+/// Every synthetic scenario subdirectory: a directory holding a `base.cls.json`. This skips the
+/// README and the `real/` corpus (whose children are model pairs, exercised by the coverage
+/// benchmark, not synthetic-oracle scenarios).
 fn scenarios() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = fs::read_dir(corpus_dir())
         .expect("corpus dir should exist")
         .map(|e| e.expect("readable dir entry").path())
-        .filter(|p| p.is_dir())
+        .filter(|p| p.join("base.cls.json").is_file())
         .collect();
     dirs.sort();
     dirs
