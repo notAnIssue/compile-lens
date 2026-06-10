@@ -71,6 +71,33 @@ def test_full_example_loads() -> None:
     assert artifact.kernels[0].features.num_regs == 168  # type: ignore[union-attr]
 
 
+def test_fx_nodes_parse_with_ordered_inputs() -> None:
+    artifact = from_json(FULL)
+    nodes = artifact.compiled_graphs[0].nodes
+    assert len(nodes) == 4
+
+    # required-only node: no inputs, no attrs
+    assert nodes[0].id == "n0"
+    assert nodes[0].op_type == "placeholder"
+    assert nodes[0].inputs == []
+    assert nodes[0].attrs == {}
+
+    # the sub node keeps inputs in load-bearing order (n0 before n1) plus an attr
+    sub = nodes[2]
+    assert sub.op_type == "aten.sub"
+    assert sub.inputs == ["n0", "n1"]
+    assert sub.attrs == {"alpha": 1}
+    # order is a sequence, not a set: reversing it is a different node (what the diff relies on)
+    assert sub.inputs != ["n1", "n0"]
+
+
+def test_fx_nodes_absent_omitted_on_dump() -> None:
+    # A graph with no captured nodes does not emit a spurious "nodes":[] — exclude_unset
+    # mirrors serde's skip_serializing_if so the two languages stay byte-identical.
+    minimal_dump = to_json(from_json(MINIMAL))
+    assert "nodes" not in minimal_dump
+
+
 def test_round_trip_python() -> None:
     for text in (MINIMAL, FULL):
         obj1 = from_json(text)

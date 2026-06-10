@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- FX-graph node representation for diffing (ADR-024). `compiled_graphs[]` gains an optional
+  `nodes[]` array — each node carrying `id`, `op_type`, ordered `inputs` (the upstream node
+  ids it consumes; order is load-bearing so `sub(a, b)` ≠ `sub(b, a)`), and free-form `attrs`.
+  This is the node-level structure the WL-signature diff (Tool 2a) consumes. It is **inlined**
+  into the artifact rather than pointing at a side file so a single `.cls.json` stays
+  self-contained, and it is optional and forward-compatible: Tool 1 artifacts written before
+  this field simply omit it. Mirrored across the Rust (`cls-schema`) and Python
+  (`compile_lens._schema`) bindings and the JSON Schema, with cross-language round-trip parity.
 - `cl diff` subcommand skeleton (Tool 2a — compile-diff). Parses `--base` / `--head`
   (both required) and `--format`, validates both artifact paths are reachable (a missing
   one reports `CLS-E0001`), and exits with the typed `NotYetImplemented` (`CLS-E0011`) until
