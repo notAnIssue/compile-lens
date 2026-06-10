@@ -156,32 +156,36 @@ impl FxGraph {
         }
         let node = &self.nodes[pos];
 
-        // Inputs' signatures, in operand order; sorted only when the op is commutative.
-        let mut input_sigs: Vec<u64> = node
-            .inputs
-            .iter()
-            .filter_map(|id| self.index_of.get(id).copied())
-            .map(|producer| self.signature_at(producer, commutativity, memo))
-            .collect();
-        if commutativity.is_commutative(&node.op_type) {
-            input_sigs.sort_unstable();
-        }
-
-        // Consumers contribute only their op_types, sorted (their order is not meaningful here).
-        let mut consumer_ops: Vec<&str> = self.consumers[pos]
-            .iter()
-            .map(|&c| self.nodes[c].op_type.as_str())
-            .collect();
-        consumer_ops.sort_unstable();
-
         let mut hasher = DefaultHasher::new();
         node.op_type.hash(&mut hasher);
-        // A graph input is seeded by its argument index so the first input differs from the second.
         if let Some(arg) = self.placeholder_arg.get(&node.id) {
+            // A graph input's identity is its argument position, full stop. Its signature is
+            // seeded by that index (so the first input differs from the second) and deliberately
+            // excludes inputs (it has none) and consumers — an input is the same input regardless
+            // of what reads it, so it must still anchor when a downstream op is restructured (e.g.
+            // a fusion split changes which ops consume it).
             arg.hash(&mut hasher);
+        } else {
+            // Inputs' signatures, in operand order; sorted only when the op is commutative.
+            let mut input_sigs: Vec<u64> = node
+                .inputs
+                .iter()
+                .filter_map(|id| self.index_of.get(id).copied())
+                .map(|producer| self.signature_at(producer, commutativity, memo))
+                .collect();
+            if commutativity.is_commutative(&node.op_type) {
+                input_sigs.sort_unstable();
+            }
+            // Consumers contribute only their op_types, sorted (their order is not meaningful).
+            let mut consumer_ops: Vec<&str> = self.consumers[pos]
+                .iter()
+                .map(|&c| self.nodes[c].op_type.as_str())
+                .collect();
+            consumer_ops.sort_unstable();
+
+            input_sigs.hash(&mut hasher);
+            consumer_ops.hash(&mut hasher);
         }
-        input_sigs.hash(&mut hasher);
-        consumer_ops.hash(&mut hasher);
         let sig = hasher.finish();
 
         memo[pos] = Some(sig);

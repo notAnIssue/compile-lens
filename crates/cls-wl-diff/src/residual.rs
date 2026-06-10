@@ -28,8 +28,12 @@ pub struct ResidualClassification {
     pub added: Vec<String>,
     /// Base node ids with no head counterpart, in node order.
     pub removed: Vec<String>,
-    /// Matched `(base_id, head_id)` pairs whose attributes differ, in matching order.
+    /// Matched `(base_id, head_id)` pairs whose content changed — different attributes, or a
+    /// recovered non-commutative operand reorder. In matching order.
     pub modified: Vec<(String, String)>,
+    /// All matched `(base_id, head_id)` pairs: the structural matches plus any recovered
+    /// reordered pairs. The added/removed lists are exactly the nodes not in here.
+    pub matched: Vec<(String, String)>,
     /// Fraction of base nodes that found a match, in `[0, 1]`. An empty base graph is `1.0`.
     pub match_coverage: f64,
     /// Per matched base node, a confidence in `[0, 1]` (structural uniqueness blended with
@@ -45,8 +49,18 @@ pub fn classify_residual(
     matching: &Matching,
     commutativity: &CommutativitySet,
 ) -> ResidualClassification {
-    let matched_base: IndexSet<&str> = matching.pairs.keys().map(String::as_str).collect();
-    let matched_head: IndexSet<&str> = matching.pairs.values().map(String::as_str).collect();
+    // Start from the structural matches, then recover reordered pairs: a base and head node left
+    // unmatched but with the same op_type and the same *set* of matched inputs is the same node
+    // with its operands rearranged (the non-commutative operand swap the signature flagged but
+    // could not align by position). These are matches — and modifications.
+    let mut all_matched: IndexMap<String, String> = matching.pairs.clone();
+    let recovered = recover_reordered(before, after, &matching.pairs);
+    for (base_id, head_id) in &recovered {
+        all_matched.insert(base_id.clone(), head_id.clone());
+    }
+
+    let matched_base: IndexSet<&str> = all_matched.keys().map(String::as_str).collect();
+    let matched_head: IndexSet<&str> = all_matched.values().map(String::as_str).collect();
 
     let removed: Vec<String> = before
         .node_ids()
@@ -59,19 +73,27 @@ pub fn classify_residual(
         .map(String::from)
         .collect();
 
-    // A matched pair is `modified` when its attributes differ — structure already matched, since
-    // the signature does not look at attrs.
-    let modified: Vec<(String, String)> = matching
-        .pairs
+    // A matched pair is `modified` when its content changed: a structural match whose attributes
+    // differ, or a recovered pair (its operands were reordered).
+    let recovered_set: IndexSet<&str> = recovered.iter().map(|(b, _)| b.as_str()).collect();
+    let modified: Vec<(String, String)> = all_matched
         .iter()
-        .filter(|(base_id, head_id)| before.attrs_of(base_id) != after.attrs_of(head_id))
+        .filter(|(base_id, head_id)| {
+            recovered_set.contains(base_id.as_str())
+                || before.attrs_of(base_id) != after.attrs_of(head_id)
+        })
         .map(|(base_id, head_id)| (base_id.clone(), head_id.clone()))
+        .collect();
+
+    let matched: Vec<(String, String)> = all_matched
+        .iter()
+        .map(|(b, h)| (b.clone(), h.clone()))
         .collect();
 
     let match_coverage = if before.len() == 0 {
         1.0
     } else {
-        matching.pairs.len() as f64 / before.len() as f64
+        all_matched.len() as f64 / before.len() as f64
     };
 
     // Structural-uniqueness component: 1 / (number of base nodes sharing this node's signature).
@@ -81,15 +103,14 @@ pub fn classify_residual(
         *bucket_sizes.entry(sig).or_insert(0) += 1;
     }
 
-    let confidence: IndexMap<String, f64> = matching
-        .pairs
+    let confidence: IndexMap<String, f64> = all_matched
         .iter()
         .map(|(base_id, head_id)| {
             let uniqueness = base_signatures
                 .get(base_id)
                 .and_then(|sig| bucket_sizes.get(sig))
                 .map_or(1.0, |&count| 1.0 / count as f64);
-            let agreement = neighborhood_agreement(before, after, matching, base_id, head_id);
+            let agreement = neighborhood_agreement(before, after, &all_matched, base_id, head_id);
             (base_id.clone(), 0.5 * uniqueness + 0.5 * agreement)
         })
         .collect();
@@ -98,9 +119,68 @@ pub fn classify_residual(
         added,
         removed,
         modified,
+        matched,
         match_coverage,
         confidence,
     }
+}
+
+/// Recover same-node pairs the structural matching left behind: a base and head node both
+/// unmatched, with the same `op_type` and the same *multiset* of matched inputs (each base input
+/// maps, through the structural matching, to the corresponding head input — regardless of order).
+/// That is the same node with its operands rearranged, which the position-aligned expansion can't
+/// catch precisely because the order changed. Greedy and 1:1; only nodes with a non-empty, fully
+/// matched input list are eligible (so e.g. bare placeholders are never spuriously paired here).
+fn recover_reordered(
+    before: &FxGraph,
+    after: &FxGraph,
+    structural: &IndexMap<String, String>,
+) -> Vec<(String, String)> {
+    let matched_base: IndexSet<&str> = structural.keys().map(String::as_str).collect();
+    let matched_head: IndexSet<&str> = structural.values().map(String::as_str).collect();
+
+    let unmatched_head: Vec<&str> = after
+        .node_ids()
+        .filter(|id| !matched_head.contains(id))
+        .collect();
+
+    let mut used_head: IndexSet<&str> = IndexSet::new();
+    let mut recovered: Vec<(String, String)> = Vec::new();
+
+    for base in before.node_ids().filter(|id| !matched_base.contains(id)) {
+        // Map base's in-graph inputs through the structural matching; require all matched.
+        let mapped: Option<Vec<&str>> = before
+            .inputs_of(base)
+            .iter()
+            .filter(|i| before.op_type_of(i).is_some())
+            .map(|i| structural.get(i).map(String::as_str))
+            .collect();
+        let Some(mut mapped) = mapped else { continue };
+        if mapped.is_empty() {
+            continue;
+        }
+        mapped.sort_unstable();
+
+        let base_op = before.op_type_of(base);
+        for &head in &unmatched_head {
+            if used_head.contains(head) || after.op_type_of(head) != base_op {
+                continue;
+            }
+            let mut head_inputs: Vec<&str> = after
+                .inputs_of(head)
+                .iter()
+                .filter(|i| after.op_type_of(i).is_some())
+                .map(String::as_str)
+                .collect();
+            head_inputs.sort_unstable();
+            if head_inputs == mapped {
+                recovered.push((base.to_string(), head.to_string()));
+                used_head.insert(head);
+                break;
+            }
+        }
+    }
+    recovered
 }
 
 /// Fraction of `base`'s in-graph neighbors (inputs + consumers) whose match is a neighbor of
@@ -108,7 +188,7 @@ pub fn classify_residual(
 fn neighborhood_agreement(
     before: &FxGraph,
     after: &FxGraph,
-    matching: &Matching,
+    pairs: &IndexMap<String, String>,
     base: &str,
     head: &str,
 ) -> f64 {
@@ -134,8 +214,7 @@ fn neighborhood_agreement(
     let agreeing = base_neighbors
         .iter()
         .filter(|bn| {
-            matching
-                .pairs
+            pairs
                 .get(**bn)
                 .is_some_and(|hn| head_neighbors.contains(hn.as_str()))
         })
