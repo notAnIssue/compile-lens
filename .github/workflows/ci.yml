@@ -28,6 +28,23 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  algorithmic-invariant:
+    name: Algorithmic invariants (release blocker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The three release-blocker correctness invariants of the compile-diff (design D7):
+      # operand-order handling, match coverage on real model graphs, and matching precision on the
+      # gold corpus. They also run inside `cargo test --workspace` in the test job; this dedicated
+      # job exists to make the gate visible — a red check here unambiguously means "do not release".
+      - run: >
+          cargo test -p cls-wl-diff
+          --test operand_order_regression
+          --test coverage_benchmark
+          --test gold_precision
+
   ruff-mypy:
     name: Python lint + typecheck
     runs-on: ubuntu-latest
