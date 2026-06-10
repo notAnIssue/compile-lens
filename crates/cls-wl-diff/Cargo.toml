@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 cls-schema = { path = "../cls-schema" }
 indexmap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }

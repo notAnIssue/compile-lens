@@ -8,11 +8,13 @@
 mod commutativity;
 mod diff;
 mod expand;
+mod render;
 mod residual;
 mod signature;
 
 pub use commutativity::CommutativitySet;
 pub use diff::{diff_graphs, IrGraphDiff, NodeId};
 pub use expand::{anchor_uniqueness_ratio, expand_from_anchors, Matching};
+pub use render::{render, Format};
 pub use residual::{classify_residual, ResidualClassification};
 pub use signature::{extract_anchors, Anchor, FxGraph};

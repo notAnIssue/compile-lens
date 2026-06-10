@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cl diff` is wired — Tool 2a (compile-diff) now runs end to end. `cl diff --base before.cls.json
+  --head after.cls.json --format markdown|json|text` reads two collected sessions, diffs their
+  compiled graphs with the WL-signature matcher, and renders the result: the nodes a change added /
+  removed / modified, the matched pairs with a per-match confidence, and two quality numbers (match
+  coverage and anchor uniqueness). A non-commutative operand swap shows up as `modified`, a
+  commutative one stays silent, and a pure rename matches cleanly. (The subcommand previously parsed
+  its arguments but returned `NotYetImplemented` while the algorithm was built up.)
 - `CompileArtifactCollector` (Python) — the capture side of Tool 2a (compile-diff). It hooks a
   `torch.compile` run and serializes the **aten-normalized** FX graph into the inline
   `compiled_graphs[].nodes[]` contract (ADR-024): each node's `id`, `op_type`, ordered `inputs`,
