@@ -171,7 +171,10 @@ class CompileArtifactCollector:
             self.add_graph_module(aten_gm)
             return aten_gm.forward
 
-        return aot_autograd(fw_compiler=_forward_compiler)
+        # aot_autograd is untyped (returns Any); bind to the declared type so the public
+        # signature stays precise rather than leaking Any to callers.
+        compile_backend: Callable[..., Any] = aot_autograd(fw_compiler=_forward_compiler)
+        return compile_backend
 
     def capture(self, fn: Any, *args: Any, **kwargs: Any) -> None:
         """Compile ``fn`` with the capturing backend and run it once under ``no_grad`` so the
