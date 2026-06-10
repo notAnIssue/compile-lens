@@ -89,9 +89,9 @@ def test_mode_a_pipeline_matches_oracle(case: str, tmp_path: Path) -> None:
     oracle = json.loads((FIXTURES / f"{case}.expected.json").read_text())
 
     # 1. Recompile count: collect + analyze agree with the oracle.
-    assert (
-        findings["total_recompilations"] == oracle["expected_recompile_count"]
-    ), f"{case}: recompile count mismatch"
+    assert findings["total_recompilations"] == oracle["expected_recompile_count"], (
+        f"{case}: recompile count mismatch"
+    )
 
     categories = {c["category"] for c in findings["guard_categories"]}
     suggestion_text = " ".join(s["text"] for s in findings["top_suggestions"])
@@ -104,9 +104,9 @@ def test_mode_a_pipeline_matches_oracle(case: str, tmp_path: Path) -> None:
 
     # 2. Each expected cluster: category surfaced, raw guard captured, suggestion advises right.
     for expected in oracle["expected_clusters"]:
-        assert (
-            expected["category"] in categories
-        ), f"{case}: expected a {expected['category']} cluster, got {sorted(categories)}"
+        assert expected["category"] in categories, (
+            f"{case}: expected a {expected['category']} cluster, got {sorted(categories)}"
+        )
         for needle in expected.get("guard_text_contains", []):
             assert needle in guard_exprs, f"{case}: collected guard text missing {needle!r}"
         for keyword in expected.get("expected_suggestion_keywords", []):
