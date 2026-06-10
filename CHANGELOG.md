@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.2] — 2026-06-10
+
+Tool 2a (`compile-diff`) complete: capture → diff → render, end-to-end from the CLI. A
+Weisfeiler–Lehman-style structural matcher (anchor → neighborhood expansion → residual
+classification) diffs two compiled FX graphs into added / removed / modified nodes with a
+per-match confidence, correct on non-commutative operand swaps and rename-invariant. Three
+release-blocker invariants gate it in CI (operand-order, ≥0.70 median match coverage on real
+model graphs, ≥0.90 gold-corpus precision). (Still pre-MVP — v0.5.0 also needs the hero form.)
+
 ### Added
 
 - `cl diff` is wired — Tool 2a (compile-diff) now runs end to end. `cl diff --base before.cls.json
@@ -39,13 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-contained, and it is optional and forward-compatible: Tool 1 artifacts written before
   this field simply omit it. Mirrored across the Rust (`cls-schema`) and Python
   (`compile_lens._schema`) bindings and the JSON Schema, with cross-language round-trip parity.
-- `cl diff` subcommand skeleton (Tool 2a — compile-diff). Parses `--base` / `--head`
-  (both required) and `--format`, validates both artifact paths are reachable (a missing
-  one reports `CLS-E0001`), and exits with the typed `NotYetImplemented` (`CLS-E0011`) until
-  the WL-signature diff algorithm lands in the upcoming Phase 2 PRs — mirroring how the
-  Tool 1 subcommands were stubbed before their analyzers existed. (The `--include-cache-stability`
-  flag is intentionally **not** added yet — its logic is Tool 2b in a later phase.)
-
 ## [0.5.0-alpha.1] — 2026-06-08
 
 Tool 1 (`recompile-summary`) complete: collect → analyze → render, end-to-end from the CLI,
@@ -358,5 +360,7 @@ top of (Tool 1 recompile aggregator, Tool 2a compile diff, Hero `cl.session()`).
 - A typed schema migration ladder (kept as detect-and-refuse until V1, per the
   pre-V1 D10 exception in the design doc).
 
-[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.0...HEAD
+[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.2...HEAD
+[0.5.0-alpha.2]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
+[0.5.0-alpha.1]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.0...v0.5.0-alpha.1
 [0.5.0-alpha.0]: https://github.com/notAnIssue/compile-lens/releases/tag/v0.5.0-alpha.0
