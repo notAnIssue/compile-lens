@@ -14,9 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `compiled_graphs[].nodes[]` contract (ADR-024): each node's `id`, `op_type`, ordered `inputs`,
   and scalar `attrs`. Routing through `aot_autograd` yields canonical aten ops (`aten.sub.Tensor`)
   rather than dynamo-level Python builtins, and operand order is preserved (load-bearing for the
-  diff). Single-graph capture, `default-strict` redaction at write time; the diff consumer and
-  multi-iteration runtime capture land in later PRs. (`torch` stays an optional dependency,
-  imported lazily.)
+  diff). Single-graph capture, `default-strict` redaction at write time; the diff consumer
+  lands in a later PR. (`torch` stays an optional dependency, imported lazily.)
+- Multi-iteration capture in `CompileArtifactCollector` — `capture(..., iterations=N)` runs the
+  compiled function N times and records a per-run `iterations[]` entry: `cache_hit` /
+  `recompilation_triggered` (detected by whether the run drove a fresh compile), an
+  `output_signature` (sha256 over the run's output tensors — stable across iterations means
+  identical output), and, for an `nn.Module`, an `internal_state_snapshot` (buffers hash + the
+  scalar attributes that drifted since the previous iteration). This is the runtime-behaviour
+  data foundation for cache-stability analysis. (Guard-evaluation capture is left for a later
+  change.)
 - FX-graph node representation for diffing (ADR-024). `compiled_graphs[]` gains an optional
   `nodes[]` array — each node carrying `id`, `op_type`, ordered `inputs` (the upstream node
   ids it consumes; order is load-bearing so `sub(a, b)` ≠ `sub(b, a)`), and free-form `attrs`.

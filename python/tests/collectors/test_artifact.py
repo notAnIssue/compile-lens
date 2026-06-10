@@ -184,3 +184,80 @@ def test_operand_order_preserved_through_real_capture(tmp_path: Path) -> None:
     sub = next(n for n in nodes if n.op_type.startswith("aten.sub"))
     # The sub node consumes the two placeholders in their declared order.
     assert sub.inputs == placeholders
+
+
+# ── multi-iteration capture ─────────────────────────────────────────────────────────────
+def test_iterations_1_default(tmp_path: Path) -> None:
+    collector = _collector(tmp_path)
+
+    def f(a, b):
+        return torch.sub(a, b)
+
+    collector.capture(f, torch.randn(4), torch.randn(4))  # iterations defaults to 1
+    iterations = from_json(collector.finalize().read_text()).iterations
+    assert len(iterations) == 1
+    assert iterations[0].iteration_index == 0
+
+
+def test_iterations_10_captured(tmp_path: Path) -> None:
+    collector = _collector(tmp_path)
+
+    def f(a, b):
+        return torch.sub(a, b)
+
+    collector.capture(f, torch.randn(4), torch.randn(4), iterations=10)
+    iterations = from_json(collector.finalize().read_text()).iterations
+    assert len(iterations) == 10
+    assert [it.iteration_index for it in iterations] == list(range(10))
+
+
+def test_cache_hit_tracking(tmp_path: Path) -> None:
+    collector = _collector(tmp_path)
+
+    def f(a, b):
+        return torch.sub(a, b)
+
+    # Same input every iteration: the first run compiles, the rest are cache hits.
+    collector.capture(f, torch.randn(4), torch.randn(4), iterations=3)
+    iterations = from_json(collector.finalize().read_text()).iterations
+
+    assert iterations[0].cache_hit is False  # initial compile, not a hit
+    assert iterations[0].recompilation_triggered is False  # ...but not a recompile either
+    assert all(it.cache_hit is True for it in iterations[1:])
+    assert all(it.recompilation_triggered is False for it in iterations[1:])
+
+
+def test_output_signature_stable_for_same_input(tmp_path: Path) -> None:
+    collector = _collector(tmp_path)
+
+    def f(a, b):
+        return torch.sub(a, b)
+
+    collector.capture(f, torch.randn(4), torch.randn(4), iterations=5)
+    iterations = from_json(collector.finalize().read_text()).iterations
+
+    signatures = {it.output_signature for it in iterations}
+    assert len(signatures) == 1  # identical output every iteration
+    assert None not in signatures  # a real signature was computed
+
+
+def test_module_attrs_changed_detected(tmp_path: Path) -> None:
+    collector = _collector(tmp_path)
+
+    class Counter(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.step = 0
+
+        def forward(self, x):
+            self.step += 1  # mutable attribute drift across iterations
+            return torch.relu(x)
+
+    collector.capture(Counter(), torch.randn(4), iterations=3)
+    iterations = from_json(collector.finalize().read_text()).iterations
+
+    # The first iteration has no previous to diff against; later iterations see `step` change.
+    later = [it for it in iterations[1:] if it.internal_state_snapshot is not None]
+    assert any(
+        "step" in it.internal_state_snapshot.module_attrs_changed for it in later
+    ), "module attribute drift should be detected after the first iteration"
