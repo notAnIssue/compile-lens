@@ -132,7 +132,20 @@
         "inductor_ir_path": { "type": "string" },
         "guard_list": { "type": "array", "items": { "type": "string" } },
         "kernel_ids": { "type": "array", "items": { "type": "string" }, "description": "Cross-reference into kernels[] (normalized top-level, ADR-021)." },
-        "compile_phases_summary": { "type": "object", "additionalProperties": true }
+        "compile_phases_summary": { "type": "object", "additionalProperties": true },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/FxNode" }, "description": "Node-level FX graph structure for the WL-signature diff (Tool 2a, ADR-024). Inlined so a single .cls.json stays self-contained; optional and forward-compatible." }
+      }
+    },
+
+    "FxNode": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "op_type"],
+      "properties": {
+        "id": { "type": "string", "description": "Graph-unique node id; referenced by other nodes' inputs to encode an edge." },
+        "op_type": { "type": "string", "description": "The operation, e.g. aten.matmul or a call_function target." },
+        "inputs": { "type": "array", "items": { "type": "string" }, "description": "Ordered ids of upstream nodes this one consumes. Order is load-bearing: sub(a,b) != sub(b,a)." },
+        "attrs": { "type": "object", "additionalProperties": true, "description": "Node attributes (a constant's value, a dim parameter, …); a difference here makes the diff classify a node as modified." }
       }
     },
 

@@ -42,8 +42,9 @@ pub use kernels::{
     PruningDecision, RooflinePrediction, Suggestion,
 };
 pub use records::{
-    CompilePhase, CompiledGraph, FailedGuard, GraphBreak, GuardEvaluation, InternalStateSnapshot,
-    Iteration, LintFinding, Recompilation, ReferenceIssue, SourceLocation, SourceRange,
+    CompilePhase, CompiledGraph, FailedGuard, FxNode, GraphBreak, GuardEvaluation,
+    InternalStateSnapshot, Iteration, LintFinding, Recompilation, ReferenceIssue, SourceLocation,
+    SourceRange,
 };
 pub use session::{CompileConfig, EnvSnapshot, RedactionPolicy, Session};
 

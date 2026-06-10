@@ -95,6 +95,37 @@ pub struct CompiledGraph {
     pub kernel_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "indexmap::IndexMap::is_empty")]
     pub compile_phases_summary: crate::JsonMap,
+    /// Node-level FX graph structure consumed by the WL-signature diff (Tool 2a, ADR-024).
+    /// Inlined into the artifact so a single `.cls.json` stays self-contained rather than
+    /// pointing at a side file. Optional and forward-compatible: a Tool 1 artifact written
+    /// before this field existed simply omits it (empty), and the diff treats a graph with
+    /// no `nodes` as "structure not captured".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<FxNode>,
+}
+
+/// One node of a captured FX graph (`compiled_graphs[].nodes[]`).
+///
+/// An FX graph is the computation graph `torch.compile` traces from model code: a sequence
+/// of operations (nodes) with dependency edges. Edges are encoded implicitly — a node lists
+/// the ids of the upstream nodes whose outputs it consumes in [`FxNode::inputs`]. This is the
+/// minimum structure the WL-signature diff needs to tell which nodes a change added, removed,
+/// or modified (ADR-024).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FxNode {
+    /// Graph-unique node id. Other nodes reference it in their `inputs` to encode an edge.
+    pub id: String,
+    /// The operation, e.g. `aten.matmul` or a `call_function` target.
+    pub op_type: String,
+    /// Ordered ids of the upstream nodes this one consumes. **Order is load-bearing**:
+    /// `sub(a, b)` and `sub(b, a)` differ only in this ordering, so operand-order regressions
+    /// are detectable only because the sequence is preserved rather than treated as a set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<String>,
+    /// Node attributes (a constant's value, a dim parameter, …). Two otherwise-identical nodes
+    /// that differ here are classified `modified` by the diff.
+    #[serde(default, skip_serializing_if = "indexmap::IndexMap::is_empty")]
+    pub attrs: crate::JsonMap,
 }
 
 /// One named compile phase with its wall-clock cost (`compile_phases[]`).
