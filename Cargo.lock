@@ -217,7 +217,9 @@ dependencies = [
  "clap",
  "cls-analyzer",
  "cls-errors",
+ "cls-schema",
  "cls-schema-migrate",
+ "cls-wl-diff",
  "miette",
  "serde_json",
  "tracing",
@@ -285,6 +287,7 @@ version = "0.5.0"
 dependencies = [
  "cls-schema",
  "indexmap",
+ "serde",
  "serde_json",
 ]
 

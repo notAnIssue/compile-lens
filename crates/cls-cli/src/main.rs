@@ -92,10 +92,9 @@ enum Command {
 
     /// Diff two collected sessions' compiled graphs (Tool 2a — WL-signature
     /// neighborhood diff). Reports the nodes a change added / removed / modified
-    /// between a `--base` and a `--head` artifact. The diff algorithm lands in
-    /// the upcoming Phase 2 PRs; right now the subcommand parses arguments,
-    /// verifies both input paths are reachable, and exits with the typed
-    /// `NotYetImplemented` error.
+    /// between a `--base` and a `--head` artifact, with a per-match confidence and
+    /// two quality numbers (match coverage and anchor uniqueness), rendered as
+    /// `markdown`, `json`, or `text`.
     Diff {
         /// The baseline `.cls.json` artifact (the "before" side).
         #[arg(long, value_name = "PATH")]
@@ -333,20 +332,35 @@ fn recompile_summary(
 fn diff(
     base: std::path::PathBuf,
     head: std::path::PathBuf,
-    _format: SummaryFormat,
+    format: SummaryFormat,
 ) -> Result<(), ClsError> {
-    // Verify both inputs now so a typo surfaces as the typed `IoError` (CLS-E0001,
-    // exit 3) instead of getting swallowed by the not-yet-implemented branch.
-    for path in [&base, &head] {
-        std::fs::metadata(path).map_err(|source| ClsError::IoError {
-            path: path.display().to_string(),
-            source,
-        })?;
-    }
-    Err(ClsError::NotYetImplemented {
-        surface: "cl diff".into(),
-        tracking: "Phase 2 (Tool 2a)".into(),
-    })
+    // `load_artifact` reads + version-gates + parses each side; a missing file surfaces as the
+    // typed `IoError` (CLS-E0001, exit 3) here, not deep in the diff.
+    let before = cls_schema_migrate::load_artifact(&base)?;
+    let after = cls_schema_migrate::load_artifact(&head)?;
+
+    // Diff the first compiled graph on each side (a session captures one graph per compile). An
+    // artifact with no compiled graph diffs as an empty graph rather than erroring.
+    let before_graph = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&before));
+    let after_graph = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&after));
+    let result = cls_wl_diff::diff_graphs(&before_graph, &after_graph);
+
+    let render_format = match format {
+        SummaryFormat::Markdown => cls_wl_diff::Format::Markdown,
+        SummaryFormat::Json => cls_wl_diff::Format::Json,
+        SummaryFormat::Text => cls_wl_diff::Format::Text,
+    };
+    print!("{}", cls_wl_diff::render(&result, render_format));
+    Ok(())
+}
+
+/// The node-level structure of an artifact's first compiled graph, or empty if it has none.
+fn first_graph_nodes(artifact: &cls_schema::ClsArtifact) -> &[cls_schema::FxNode] {
+    artifact
+        .compiled_graphs
+        .first()
+        .map(|g| g.nodes.as_slice())
+        .unwrap_or(&[])
 }
 
 /// `cl migrate` — unchanged from v0.5.0; kept under `run` so the dispatch

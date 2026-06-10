@@ -15,7 +15,7 @@ use crate::CommutativitySet;
 pub type NodeId = String;
 
 /// The structured diff between two compiled graphs.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct IrGraphDiff {
     /// Head node ids with no base counterpart.
     pub added: Vec<NodeId>,

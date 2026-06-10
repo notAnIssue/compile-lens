@@ -191,35 +191,54 @@ fn diff_nonexistent_base_exits_three() {
 }
 
 #[test]
-fn diff_with_existing_inputs_exits_not_yet_implemented() {
-    // Both inputs reachable → falls through to NotYetImplemented (CLS-E0011) → exit 13.
-    let base = std::env::temp_dir().join(format!("cls_diff_base_{}.cls.json", std::process::id()));
-    let head = std::env::temp_dir().join(format!("cls_diff_head_{}.cls.json", std::process::id()));
-    std::fs::write(&base, b"{}").expect("write base");
-    std::fs::write(&head, b"{}").expect("write head");
+fn diff_runs_on_fixture_pairs_and_classifies_changes() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/diff");
+    let run = |scenario: &str| -> (Option<i32>, String) {
+        let dir = root.join(scenario);
+        let out = cl()
+            .arg("diff")
+            .arg("--base")
+            .arg(dir.join("base.cls.json"))
+            .arg("--head")
+            .arg(dir.join("head.cls.json"))
+            .arg("--format")
+            .arg("markdown")
+            .output()
+            .expect("spawn cl");
+        (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
 
-    let out = cl()
-        .arg("diff")
-        .arg("--base")
-        .arg(&base)
-        .arg("--head")
-        .arg(&head)
-        .stderr(Stdio::piped())
-        .output()
-        .expect("spawn cl");
+    // Runs cleanly (exit 0) on several real fixture pairs.
+    for scenario in [
+        "add_node",
+        "remove_node",
+        "operand_swap_sub",
+        "commutative_add",
+    ] {
+        let (code, stdout) = run(scenario);
+        assert_eq!(code, Some(0), "{scenario}: cl diff should exit 0");
+        assert!(
+            stdout.contains("## Compile Diff"),
+            "{scenario}: markdown header missing:\n{stdout}"
+        );
+    }
 
-    let _ = std::fs::remove_file(&base);
-    let _ = std::fs::remove_file(&head);
-
-    assert_eq!(
-        out.status.code(),
-        Some(13),
-        "expected exit 13 (CLS-E0011), got {:?}; stderr:\n{}",
-        out.status.code(),
-        String::from_utf8_lossy(&out.stderr),
+    // And classifies each correctly, through the CLI end to end.
+    let added = run("add_node").1;
+    assert!(
+        added.contains("Added") && added.contains("n3"),
+        "add_node:\n{added}"
+    );
+    let swapped = run("operand_swap_sub").1;
+    assert!(
+        swapped.contains("Modified") && swapped.contains("n2"),
+        "operand_swap_sub:\n{swapped}"
     );
     assert!(
-        String::from_utf8_lossy(&out.stderr).contains("cl diff"),
-        "diagnostic should name the unimplemented surface"
+        run("commutative_add").1.contains("No structural changes"),
+        "commutative_add should be silent"
     );
 }
