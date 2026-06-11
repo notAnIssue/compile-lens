@@ -98,6 +98,51 @@ pub(crate) fn analyze_iterations(iterations: &[Iteration]) -> CacheStabilityFind
     CacheStabilityFindings { findings }
 }
 
+/// Output format for `cl cache-stability` (Mode B findings). The design exposes `markdown|json`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    Markdown,
+    Json,
+}
+
+/// Render Mode B findings to the chosen format (the CLI prints the result verbatim).
+pub fn render(findings: &CacheStabilityFindings, format: Format) -> String {
+    match format {
+        Format::Json => {
+            // A derive-Serialize struct of owned strings/enums cannot fail to serialize.
+            serde_json::to_string_pretty(findings).expect("CacheStabilityFindings serializes")
+        }
+        Format::Markdown => render_markdown(findings),
+    }
+}
+
+fn render_markdown(findings: &CacheStabilityFindings) -> String {
+    let mut out = String::from("## Cache Stability\n\n");
+    if findings.findings.is_empty() {
+        out.push_str("No cache-stability anomalies detected.\n");
+        return out;
+    }
+    out.push_str(&format!(
+        "{} high-severity finding(s).\n\n",
+        findings.findings.len()
+    ));
+    for f in &findings.findings {
+        out.push_str(&format!(
+            "- **iteration {}** ({}) — `{}`",
+            f.iteration_index,
+            match f.severity {
+                Severity::High => "high",
+            },
+            f.pattern,
+        ));
+        if !f.changed_attrs.is_empty() {
+            out.push_str(&format!("; changed: {}", f.changed_attrs.join(", ")));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The diff-based (Mode A) cache-stability result between a base and head session. It catches a
 /// *regression a change introduced*: the head run becomes unstable where the base run was steady,
 /// or the head triggers recompilations the base did not.
@@ -349,5 +394,37 @@ mod tests {
         let base = [iter(0, None, Some("A"), &[]), iter(1, None, Some("A"), &[])];
         let head = [iter(0, None, Some("A"), &[]), iter(1, None, Some("A"), &[])];
         assert!(analyze_diff_iterations(&base, &head).is_clean());
+    }
+
+    // --- render ---
+
+    fn one_finding() -> CacheStabilityFindings {
+        let iters = [
+            iter(0, Some(false), Some("A"), &[]),
+            iter(1, Some(true), Some("A"), &["counter"]),
+        ];
+        analyze_iterations(&iters)
+    }
+
+    #[test]
+    fn test_render_markdown_lists_findings() {
+        let md = render(&one_finding(), Format::Markdown);
+        assert!(md.contains("## Cache Stability"));
+        assert!(md.contains("iteration 1"));
+        assert!(md.contains("counter"));
+    }
+
+    #[test]
+    fn test_render_markdown_empty_says_so() {
+        let empty = CacheStabilityFindings { findings: vec![] };
+        assert!(render(&empty, Format::Markdown).contains("No cache-stability anomalies"));
+    }
+
+    #[test]
+    fn test_render_json_round_trips() {
+        let json = render(&one_finding(), Format::Json);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["findings"][0]["iteration_index"], 1);
+        assert_eq!(v["findings"][0]["severity"], "high");
     }
 }

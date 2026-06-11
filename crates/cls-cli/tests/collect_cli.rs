@@ -242,3 +242,52 @@ fn diff_runs_on_fixture_pairs_and_classifies_changes() {
         "commutative_add should be silent"
     );
 }
+
+#[test]
+fn cache_stability_detects_listing2_fixture() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/cache_stability/listing2.cls.json");
+    let out = cl()
+        .arg("cache-stability")
+        .arg(&fixture)
+        .arg("--format")
+        .arg("markdown")
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "cl cache-stability should exit 0; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("## Cache Stability"),
+        "header missing:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("iteration 1") && stdout.contains("step_counter"),
+        "Listing 2 finding missing:\n{stdout}"
+    );
+}
+
+#[test]
+fn cache_stability_nonexistent_session_exits_three() {
+    let out = cl()
+        .arg("cache-stability")
+        .arg("/nonexistent/session.cls.json")
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "missing file → CLS-E0001 exit 3"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("CLS-E0001"),
+        "diagnostic missing CLS-E0001 marker"
+    );
+}
