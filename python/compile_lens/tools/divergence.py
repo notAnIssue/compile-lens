@@ -15,8 +15,20 @@ imported lazily inside the hook path, so importing this module never imports tor
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass
+class MinifierStatus:
+    """Whether dynamo's accuracy minifier was engaged for a session."""
+
+    #: True when the dynamo repro config was found and configured.
+    available: bool
+    #: Why it was not available, if so (e.g. an older torch without the repro config).
+    reason: str | None = None
 
 
 @dataclass
@@ -143,6 +155,45 @@ def localize_divergence(
             return DivergenceFindings(name, max_abs_diff, compared, rtol, atol)
 
     return DivergenceFindings(None, None, compared, rtol, atol)
+
+
+@contextlib.contextmanager
+def accuracy_minifier() -> Iterator[MinifierStatus]:
+    """Engage dynamo's **accuracy minifier** for the duration of the block, then restore.
+
+    Once the divergence localizer tells you *which* layer diverges, the next question is a *minimal*
+    reproducer. Rather than bisect by hand, set ``torch._dynamo.config.repro_level = 4`` (accuracy
+    minification) and ``repro_after = "aot"``: when a compiled model diverges from eager under this
+    config, dynamo writes a minimized repro to its repro directory. Compose this around the run::
+
+        with accuracy_minifier() as m, divergence_session(eager, compiled) as div:
+            eager(x)
+            compiled(x)
+        div.report()  # which layer; dynamo writes the minimal repro if it accuracy-failed
+
+    Yields a :class:`MinifierStatus`. If the dynamo repro config is absent (an older torch), it
+    no-ops and yields ``available=False`` — localization still works without it. The prior config is
+    always restored on exit.
+    """
+    try:
+        from torch._dynamo import config as dynamo_config  # noqa: PLC0415
+    except Exception as exc:  # pragma: no cover - torch is present under test
+        yield MinifierStatus(available=False, reason=f"torch._dynamo unavailable: {exc}")
+        return
+
+    if not (hasattr(dynamo_config, "repro_level") and hasattr(dynamo_config, "repro_after")):
+        yield MinifierStatus(available=False, reason="dynamo repro config not present")
+        return
+
+    prev_level = dynamo_config.repro_level
+    prev_after = dynamo_config.repro_after
+    dynamo_config.repro_level = 4  # accuracy minification
+    dynamo_config.repro_after = "aot"
+    try:
+        yield MinifierStatus(available=True)
+    finally:
+        dynamo_config.repro_level = prev_level
+        dynamo_config.repro_after = prev_after
 
 
 def divergence_session(model_eager: Any, model_compiled: Any) -> DivergenceSession:
