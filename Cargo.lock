@@ -221,6 +221,7 @@ dependencies = [
  "cls-schema-migrate",
  "cls-wl-diff",
  "miette",
+ "serde",
  "serde_json",
  "tracing",
  "tracing-subscriber",

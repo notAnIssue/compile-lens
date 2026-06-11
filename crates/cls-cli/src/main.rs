@@ -376,15 +376,44 @@ fn diff(
     // artifact with no compiled graph diffs as an empty graph rather than erroring.
     let before_graph = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&before));
     let after_graph = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&after));
-    let result = cls_wl_diff::diff_graphs(&before_graph, &after_graph);
+    let graph_diff = cls_wl_diff::diff_graphs(&before_graph, &after_graph);
 
-    let render_format = match format {
-        SummaryFormat::Markdown => cls_wl_diff::Format::Markdown,
-        SummaryFormat::Json => cls_wl_diff::Format::Json,
-        SummaryFormat::Text => cls_wl_diff::Format::Text,
-    };
-    print!("{}", cls_wl_diff::render(&result, render_format));
+    // `cl diff` also carries the cache-stability diff (Tool 2b Mode A): a regression in cache
+    // behavior the change introduced. On graph-only sessions (no `iterations[]`) this is clean.
+    let cache_stability = cls_analyzer::cache_stability::analyze_diff(&before, &after);
+
+    match format {
+        SummaryFormat::Json => {
+            // Combined machine-readable contract: the graph diff and the cache-stability diff.
+            let report = DiffReport {
+                graph_diff: &graph_diff,
+                cache_stability: &cache_stability,
+            };
+            print!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("DiffReport serializes")
+            );
+        }
+        SummaryFormat::Markdown | SummaryFormat::Text => {
+            let graph_format = match format {
+                SummaryFormat::Text => cls_wl_diff::Format::Text,
+                _ => cls_wl_diff::Format::Markdown,
+            };
+            print!("{}", cls_wl_diff::render(&graph_diff, graph_format));
+            print!(
+                "\n{}",
+                cls_analyzer::cache_stability::render_diff_markdown(&cache_stability)
+            );
+        }
+    }
     Ok(())
+}
+
+/// The combined `cl diff --format json` payload: the graph diff plus the cache-stability diff.
+#[derive(serde::Serialize)]
+struct DiffReport<'a> {
+    graph_diff: &'a cls_wl_diff::IrGraphDiff,
+    cache_stability: &'a cls_analyzer::cache_stability::CacheStabilityDiff,
 }
 
 /// The node-level structure of an artifact's first compiled graph, or empty if it has none.
