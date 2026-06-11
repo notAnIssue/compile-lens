@@ -15,7 +15,31 @@ imported lazily inside the hook path, so importing this module never imports tor
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass
+class DivergenceFindings:
+    """The result of localizing eager-vs-compiled divergence across a session's captured layers."""
+
+    #: Qualified name of the first layer (in eager execution order) whose eager and compiled
+    #: activations disagree beyond tolerance, or ``None`` if none diverged.
+    first_divergent_layer: str | None
+    #: Max absolute element-wise difference at that layer (``None`` for a shape mismatch, or when
+    #: nothing diverged).
+    max_abs_diff: float | None
+    #: How many layers were numerically compared (both sides present and tensor-valued).
+    num_layers_compared: int
+    #: The tolerance used.
+    rtol: float
+    atol: float
+    #: Attributed cause — filled by the causal experiment in a later change; ``None`` for now.
+    suggested_cause: str | None = None
+
+    @property
+    def diverged(self) -> bool:
+        return self.first_divergent_layer is not None
 
 
 class DivergenceSession:
@@ -61,6 +85,10 @@ class DivergenceSession:
         """Submodule paths captured on *both* sides — the comparable set the localizer walks."""
         return sorted(set(self.eager_activations) & set(self.compiled_activations))
 
+    def report(self, rtol: float = 1e-3, atol: float = 1e-5) -> DivergenceFindings:
+        """Localize the first layer where eager and compiled activations diverge (design §8.3)."""
+        return localize_divergence(self.eager_activations, self.compiled_activations, rtol, atol)
+
 
 def _make_hook(name: str, store: dict[str, Any]) -> Any:
     """A forward hook that records the module's output activation under ``name``."""
@@ -84,6 +112,37 @@ def _snapshot(output: Any) -> Any:
             if isinstance(item, torch.Tensor):
                 return item.detach()
     return None
+
+
+def localize_divergence(
+    eager_activations: dict[str, Any],
+    compiled_activations: dict[str, Any],
+    rtol: float,
+    atol: float,
+) -> DivergenceFindings:
+    """Walk the captured layers in **eager execution order** and return the first one whose eager
+    and compiled activations disagree beyond ``(rtol, atol)``.
+
+    Execution order matters: divergence propagates downstream, so the *first* mismatched layer is
+    the root site, not just any mismatched one. ``eager_activations`` preserves insertion order,
+    which is the order the forward hooks fired — i.e. eager execution order.
+    """
+    import torch  # noqa: PLC0415 — comparison needs torch; activations are torch tensors
+
+    compared = 0
+    for name, eager in eager_activations.items():
+        compiled = compiled_activations.get(name)
+        if eager is None or compiled is None:
+            continue  # a non-tensor output on either side — nothing to compare numerically
+        compared += 1
+        if eager.shape != compiled.shape:
+            # A shape mismatch is itself a divergence (and abs-diff is undefined).
+            return DivergenceFindings(name, None, compared, rtol, atol)
+        if not torch.allclose(eager, compiled, rtol=rtol, atol=atol):
+            max_abs_diff = (eager.float() - compiled.float()).abs().max().item()
+            return DivergenceFindings(name, max_abs_diff, compared, rtol, atol)
+
+    return DivergenceFindings(None, None, compared, rtol, atol)
 
 
 def divergence_session(model_eager: Any, model_compiled: Any) -> DivergenceSession:
