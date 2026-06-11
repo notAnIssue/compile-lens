@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `cl cache-stability <session.cls.json> [--format markdown|json]` — Tool 2b (Mode B). Detects a
+  silently-wrong `torch.compile` cache bug: across a run's iterations, the module's internal state
+  drifts, the compiled graph is reused from cache, and the output stays frozen — so the numerics are
+  stale while the run looks fine (Li et al. 2026, Listing 2). It reads the per-iteration data the
+  collector already captures (no new capture). The diff-based regression check (Mode A, riding on
+  `cl diff`) lands later.
+
 ## [0.5.0-alpha.2] — 2026-06-10
 
 Tool 2a (`compile-diff`) complete: capture → diff → render, end-to-end from the CLI. A
