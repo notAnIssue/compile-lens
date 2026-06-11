@@ -224,6 +224,11 @@ fn diff_runs_on_fixture_pairs_and_classifies_changes() {
             stdout.contains("## Compile Diff"),
             "{scenario}: markdown header missing:\n{stdout}"
         );
+        // cl diff also carries the cache-stability diff section (clean on graph-only fixtures).
+        assert!(
+            stdout.contains("## Cache Stability (diff)"),
+            "{scenario}: cache-stability section missing:\n{stdout}"
+        );
     }
 
     // And classifies each correctly, through the CLI end to end.

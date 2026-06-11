@@ -9,12 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cl diff` now also reports the **cache-stability diff** (Tool 2b, Mode A): below the graph diff it
+  flags a regression the change introduced — the head run becoming unstable where the base was steady,
+  or recompilations the head triggers that the base did not. Clean on graph-only sessions.
 - `cl cache-stability <session.cls.json> [--format markdown|json]` — Tool 2b (Mode B). Detects a
   silently-wrong `torch.compile` cache bug: across a run's iterations, the module's internal state
   drifts, the compiled graph is reused from cache, and the output stays frozen — so the numerics are
   stale while the run looks fine (Li et al. 2026, Listing 2). It reads the per-iteration data the
-  collector already captures (no new capture). The diff-based regression check (Mode A, riding on
-  `cl diff`) lands later.
+  collector already captures (no new capture).
+
+### Changed
+
+- `cl diff --format json` now emits a combined object `{ "graph_diff": …, "cache_stability": … }`
+  instead of the bare graph diff, so the cache-stability diff rides alongside it.
 
 ## [0.5.0-alpha.2] — 2026-06-10
 
