@@ -296,3 +296,23 @@ fn cache_stability_nonexistent_session_exits_three() {
         "diagnostic missing CLS-E0001 marker"
     );
 }
+
+/// False-positive baseline: a *normal* stateful session — state drifts, but the cache correctly
+/// invalidates (recompiles) so the output moves — must produce no finding.
+#[test]
+fn cache_stability_no_false_positive_on_normal_stateful() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/cache_stability/normal_stateful.cls.json");
+    let out = cl()
+        .arg("cache-stability")
+        .arg(&fixture)
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(out.status.code(), Some(0), "should exit 0");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No cache-stability anomalies detected"),
+        "normal stateful session must not false-positive:\n{stdout}"
+    );
+}
