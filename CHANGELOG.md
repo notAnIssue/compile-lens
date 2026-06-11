@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.3] — 2026-06-11
+
+Tool 2b (`cache-stability`) complete: detect a silently-wrong `torch.compile` cache bug — a model's
+internal state drifts between iterations, the compiled graph is reused from cache, and the output
+freezes, so the numerics are stale while the run looks fine. Mode B (single-run anomaly) ships as
+`cl cache-stability`; Mode A (diff-based regression) rides on `cl diff`. Both read the per-iteration
+data the collector already captures — a behavioral check, distinct from Tool 2a's structural graph
+diff.
+
 ### Added
 
 - `cl diff` now also reports the **cache-stability diff** (Tool 2b, Mode A): below the graph diff it
@@ -376,7 +385,8 @@ top of (Tool 1 recompile aggregator, Tool 2a compile diff, Hero `cl.session()`).
 - A typed schema migration ladder (kept as detect-and-refuse until V1, per the
   pre-V1 D10 exception in the design doc).
 
-[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.2...HEAD
+[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.3...HEAD
+[0.5.0-alpha.3]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [0.5.0-alpha.1]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.0...v0.5.0-alpha.1
 [0.5.0-alpha.0]: https://github.com/notAnIssue/compile-lens/releases/tag/v0.5.0-alpha.0
