@@ -219,6 +219,30 @@ pub(crate) fn analyze_diff_iterations(
     }
 }
 
+/// Render a Mode A cache-stability diff as a Markdown section, for appending to `cl diff` output.
+/// A clean diff still emits the section (with a "no regression" line) so the absence of a problem
+/// is explicit rather than silent.
+pub fn render_diff_markdown(diff: &CacheStabilityDiff) -> String {
+    let mut out = String::from("## Cache Stability (diff)\n\n");
+    if diff.is_clean() {
+        out.push_str("No cache-stability regression.\n");
+        return out;
+    }
+    if let Some(iter) = diff.output_instability_introduced {
+        out.push_str(&format!(
+            "- output instability introduced at iteration {iter} (base was stable, head changed)\n"
+        ));
+    }
+    if !diff.new_recompilations.is_empty() {
+        let iters: Vec<String> = diff.new_recompilations.iter().map(u64::to_string).collect();
+        out.push_str(&format!(
+            "- new recompilations the head introduced at iteration(s): {}\n",
+            iters.join(", ")
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,5 +450,27 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["findings"][0]["iteration_index"], 1);
         assert_eq!(v["findings"][0]["severity"], "high");
+    }
+
+    #[test]
+    fn test_render_diff_clean_says_no_regression() {
+        let d = CacheStabilityDiff {
+            output_instability_introduced: None,
+            new_recompilations: vec![],
+        };
+        let md = render_diff_markdown(&d);
+        assert!(md.contains("## Cache Stability (diff)"));
+        assert!(md.contains("No cache-stability regression"));
+    }
+
+    #[test]
+    fn test_render_diff_lists_regressions() {
+        let d = CacheStabilityDiff {
+            output_instability_introduced: Some(2),
+            new_recompilations: vec![3, 4],
+        };
+        let md = render_diff_markdown(&d);
+        assert!(md.contains("iteration 2"));
+        assert!(md.contains("3, 4"));
     }
 }
