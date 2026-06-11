@@ -111,6 +111,19 @@ enum Command {
         format: SummaryFormat,
     },
 
+    /// Detect cache-stability anomalies in a single collected session (Tool 2b,
+    /// Mode B). Flags iterations where the module's internal state drifted, the
+    /// compiled graph was reused from cache, and the output stayed frozen — a
+    /// silently-wrong mutable-state-not-invalidated bug (Li et al. 2026, Listing 2).
+    CacheStability {
+        /// The collected `.cls.json` session to analyze.
+        session: std::path::PathBuf,
+
+        /// Output format: `markdown` (default) or `json`.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -231,6 +244,8 @@ fn run(cli: Cli) -> Result<(), ClsError> {
 
         Some(Command::Diff { base, head, format }) => diff(base, head, format),
 
+        Some(Command::CacheStability { session, format }) => cache_stability(session, format),
+
         Some(Command::Migrate {
             input,
             output,
@@ -329,6 +344,24 @@ fn recompile_summary(
 /// `cl diff` skeleton (Tool 2a). Validates that both the `--base` and `--head`
 /// artifacts are reachable, then exits with the typed `NotYetImplemented` error.
 /// The WL-signature diff algorithm (`cls-wl-diff`) lands in upcoming Phase 2 PRs.
+fn cache_stability(session: std::path::PathBuf, format: SummaryFormat) -> Result<(), ClsError> {
+    // `load_artifact` reads + version-gates + parses; a missing file surfaces as CLS-E0001.
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let findings = cls_analyzer::cache_stability::analyze(&artifact);
+    // The subcommand exposes markdown|json; Text falls back to Markdown.
+    let render_format = match format {
+        SummaryFormat::Json => cls_analyzer::cache_stability::Format::Json,
+        SummaryFormat::Markdown | SummaryFormat::Text => {
+            cls_analyzer::cache_stability::Format::Markdown
+        }
+    };
+    print!(
+        "{}",
+        cls_analyzer::cache_stability::render(&findings, render_format)
+    );
+    Ok(())
+}
+
 fn diff(
     base: std::path::PathBuf,
     head: std::path::PathBuf,
