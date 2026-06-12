@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Tool 3 (`divergence`) complete: localize → attribute → view. It finds *where* an eager model and its
+`torch.compile`d version first diverge numerically, then attributes *which* inductor pass introduced
+it, and persists the result so a prior session can be viewed without re-running the model. Unlike the
+static-analysis tools, the capture side runs both models and so depends on `torch`; the view side
+reads the stored `.cls.json` and does not.
+
+### Added
+
+- `cl divergence-view <session.cls.json> [--format markdown|json]` — render the eager-vs-compiled
+  divergence findings stored in a session. View-only: no analysis step, no torch, no recompilation.
+- `divergence_session(eager, compiled)` (Python) — lockstep per-submodule activation capture that
+  localizes the first divergent layer in eager execution order. It unwraps a `torch.compile`
+  `OptimizedModule` so the compiled side's submodule paths align with the eager side's, which makes
+  localization work against a real compiled model and not only against two eager ones.
+- `accuracy_minifier()` (Python) — engages dynamo's accuracy minifier (`repro_level=4`,
+  `repro_after="aot"`) for the block and restores the prior config on exit, so a confirmed
+  divergence yields a minimized reproducer; it degrades gracefully on a torch without the repro
+  config.
+- `attribute_divergence(model, inputs)` (Python) — pass-level causal attribution: it toggles
+  candidate inductor passes off, recompiles, and minimizes (delta-debugging-style) to the pass(es)
+  whose disabling removes the divergence. **Pass-level only** — `torch._inductor.config` exposes
+  pass-level toggles, not per-node fusion control.
+- A `divergences[]` section in the `.cls.json` schema (the `Divergence` record with a nested
+  pass-level `attribution`; ADR-034), so findings persist for the view CLI and the hero report.
+
 ## [0.5.0-alpha.3] — 2026-06-11
 
 Tool 2b (`cache-stability`) complete: detect a silently-wrong `torch.compile` cache bug — a model's
