@@ -18,7 +18,10 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from compile_lens import _schema
 
 
 @dataclass
@@ -424,3 +427,38 @@ def attribute_divergence(
     if findings is not None:
         findings.suggested_cause = attribution.summary
     return attribution
+
+
+def divergence_to_record(
+    findings: DivergenceFindings,
+    *,
+    divergence_id: str,
+    attribution: CausalAttribution | None = None,
+) -> _schema.Divergence:
+    """Map a runtime ``DivergenceFindings`` (+ optional ``CausalAttribution``) into the schema's
+    ``Divergence`` record — the persistent form written into a ``.cls.json``'s ``divergences[]``
+    (ADR-034). The structured attribution is nested inside the record when present.
+
+    The ``compile_lens._schema`` import is lazy so this module stays cheap to import and free of a
+    pydantic import on the hot path; the returned value is a ``_schema.Divergence``.
+    """
+    from compile_lens import _schema  # noqa: PLC0415 — lazy: keep module import light
+
+    attribution_record = None
+    if attribution is not None:
+        attribution_record = _schema.DivergenceAttribution(
+            attributed=attribution.attributed,
+            responsible_passes=list(attribution.responsible_passes),
+            summary=attribution.summary,
+            num_probes=attribution.num_probes,
+        )
+    return _schema.Divergence(
+        divergence_id=divergence_id,
+        first_divergent_layer=findings.first_divergent_layer,
+        max_abs_diff=findings.max_abs_diff,
+        num_layers_compared=findings.num_layers_compared,
+        rtol=findings.rtol,
+        atol=findings.atol,
+        suggested_cause=findings.suggested_cause,
+        attribution=attribution_record,
+    )

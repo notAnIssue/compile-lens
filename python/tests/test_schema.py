@@ -64,6 +64,15 @@ def test_full_example_loads() -> None:
     assert artifact.lint_findings[0].pattern_category == "in_place_op_on_alias"
     assert artifact.roofline_predictions[0].bound_type == "memory"
 
+    # Tool 3 divergence (typed field, not extra-passthrough) with its nested attribution (ADR-034).
+    divergence = artifact.divergences[0]
+    assert divergence.first_divergent_layer == "decoder.layers.3.mlp.fc2"
+    assert divergence.max_abs_diff == 0.297
+    assert divergence.num_layers_compared == 48
+    assert divergence.attribution is not None
+    assert divergence.attribution.responsible_passes == ["post_grad_custom_post_pass"]
+    assert divergence.attribution.num_probes == 8
+
     # schema `number` -> float even though written as an integer literal
     flops = artifact.kernels[0].features.flops  # type: ignore[union-attr]
     assert isinstance(flops, float)
