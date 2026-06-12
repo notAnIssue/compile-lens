@@ -9,6 +9,7 @@
 //! findings ([`recompile_cluster`] holds the algorithm). Ranked suggestions land in a later PR.
 
 pub mod cache_stability;
+pub mod divergence;
 pub mod recompile;
 pub mod recompile_cluster;
 pub mod recompile_diff;

@@ -124,6 +124,18 @@ enum Command {
         format: SummaryFormat,
     },
 
+    /// View Tool 3's eager-vs-compiled divergence findings already stored in a
+    /// `.cls.json` (ADR-034). View-only: it reads and renders the captured
+    /// `divergences[]` and never re-runs the model, so it needs no torch.
+    DivergenceView {
+        /// The collected `.cls.json` session to view.
+        session: std::path::PathBuf,
+
+        /// Output format: `markdown` (default) or `json`.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -246,6 +258,8 @@ fn run(cli: Cli) -> Result<(), ClsError> {
 
         Some(Command::CacheStability { session, format }) => cache_stability(session, format),
 
+        Some(Command::DivergenceView { session, format }) => divergence_view(session, format),
+
         Some(Command::Migrate {
             input,
             output,
@@ -358,6 +372,24 @@ fn cache_stability(session: std::path::PathBuf, format: SummaryFormat) -> Result
     print!(
         "{}",
         cls_analyzer::cache_stability::render(&findings, render_format)
+    );
+    Ok(())
+}
+
+/// `cl divergence-view`: load a `.cls.json` and render its stored `divergences[]` (ADR-034).
+///
+/// View-only — there is no analysis step and no torch: the eager-vs-compiled comparison ran when
+/// the artifact was written, so viewing a prior session is a pure read-and-format of the records.
+fn divergence_view(session: std::path::PathBuf, format: SummaryFormat) -> Result<(), ClsError> {
+    // `load_artifact` reads + version-gates + parses; a missing file surfaces as CLS-E0001.
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let render_format = match format {
+        SummaryFormat::Json => cls_analyzer::divergence::Format::Json,
+        SummaryFormat::Markdown | SummaryFormat::Text => cls_analyzer::divergence::Format::Markdown,
+    };
+    print!(
+        "{}",
+        cls_analyzer::divergence::render(&artifact.divergences, render_format)
     );
     Ok(())
 }
