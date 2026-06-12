@@ -42,9 +42,9 @@ pub use kernels::{
     PruningDecision, RooflinePrediction, Suggestion,
 };
 pub use records::{
-    CompilePhase, CompiledGraph, FailedGuard, FxNode, GraphBreak, GuardEvaluation,
-    InternalStateSnapshot, Iteration, LintFinding, Recompilation, ReferenceIssue, SourceLocation,
-    SourceRange,
+    CompilePhase, CompiledGraph, Divergence, DivergenceAttribution, FailedGuard, FxNode,
+    GraphBreak, GuardEvaluation, InternalStateSnapshot, Iteration, LintFinding, Recompilation,
+    ReferenceIssue, SourceLocation, SourceRange,
 };
 pub use session::{CompileConfig, EnvSnapshot, RedactionPolicy, Session};
 
@@ -84,6 +84,10 @@ pub struct ClsArtifact {
     pub iterations: Vec<Iteration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lint_findings: Vec<LintFinding>,
+    /// Tool 3 eager-vs-compiled divergence findings (ADR-034). An *analysis result*, so a
+    /// normalized top-level array like its peers, not a single object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub divergences: Vec<Divergence>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kernels: Vec<Kernel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -107,6 +111,7 @@ impl ClsArtifact {
             compile_phases: Vec::new(),
             iterations: Vec::new(),
             lint_findings: Vec::new(),
+            divergences: Vec::new(),
             kernels: Vec::new(),
             roofline_predictions: Vec::new(),
             extra: JsonMap::new(),

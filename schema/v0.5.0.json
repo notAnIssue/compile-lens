@@ -19,6 +19,7 @@
     "compile_phases": { "type": "array", "items": { "$ref": "#/$defs/CompilePhase" } },
     "iterations": { "type": "array", "items": { "$ref": "#/$defs/Iteration" } },
     "lint_findings": { "type": "array", "items": { "$ref": "#/$defs/LintFinding" } },
+    "divergences": { "type": "array", "items": { "$ref": "#/$defs/Divergence" } },
     "kernels": { "type": "array", "items": { "$ref": "#/$defs/Kernel" } },
     "roofline_predictions": { "type": "array", "items": { "$ref": "#/$defs/RooflinePrediction" } }
   },
@@ -218,6 +219,49 @@
         "workaround": { "type": "string" },
         "confidence": { "type": "string" },
         "applies_to_user_torch_version": { "type": "boolean" }
+      }
+    },
+
+    "Divergence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["divergence_id", "num_layers_compared", "rtol", "atol"],
+      "description": "One eager-vs-compiled numerical divergence finding (Tool 3). Mirrors the Python DivergenceFindings. See ADR-034.",
+      "properties": {
+        "divergence_id": { "type": "string" },
+        "first_divergent_layer": {
+          "type": "string",
+          "description": "Qualified name of the first layer (eager execution order) past tolerance; absent when nothing diverged."
+        },
+        "max_abs_diff": {
+          "type": "number",
+          "description": "Max absolute element-wise diff at that layer; absent for a shape mismatch or no divergence."
+        },
+        "num_layers_compared": { "type": "integer", "minimum": 0 },
+        "rtol": { "type": "number" },
+        "atol": { "type": "number" },
+        "suggested_cause": {
+          "type": "string",
+          "description": "Human-readable attributed cause; absent when the causal experiment did not run. Equals attribution.summary when present (denormalized convenience, ADR-034)."
+        },
+        "attribution": { "$ref": "#/$defs/DivergenceAttribution" }
+      }
+    },
+
+    "DivergenceAttribution": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["attributed", "summary", "num_probes"],
+      "description": "Pass-level causal attribution for a Divergence (ADR-032 / ADR-034). Pass-level only: torch._inductor.config exposes pass-level toggles, not per-node fusion control. Mirrors the Python CausalAttribution.",
+      "properties": {
+        "attributed": { "type": "boolean" },
+        "responsible_passes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Minimal set of inductor passes whose disabling removes the divergence."
+        },
+        "summary": { "type": "string" },
+        "num_probes": { "type": "integer", "minimum": 0 }
       }
     },
 

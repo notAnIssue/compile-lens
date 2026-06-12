@@ -208,3 +208,53 @@ pub struct LintFinding {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub applies_to_user_torch_version: Option<bool>,
 }
+
+/// One eager-vs-compiled numerical divergence finding (`divergences[]`), produced by Tool 3.
+///
+/// A normalized record (ADR-021, ADR-034): a divergence is an *analysis result*, so — like
+/// `lint_findings`, and unlike the single-object `compile_config` run-metadata — it lives in a
+/// top-level array and carries a `divergence_id`. The causal attribution is **nested** rather than
+/// a separate id-joined array, because it is strictly subordinate to this one finding (ADR-034).
+///
+/// Fields mirror the Python `DivergenceFindings` 1:1. `first_divergent_layer` is absent when nothing
+/// diverged; `max_abs_diff` is absent for a shape mismatch (where it is undefined) or no divergence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Divergence {
+    pub divergence_id: String,
+    /// Qualified name of the first layer (in eager execution order) that disagreed beyond
+    /// tolerance; absent when nothing diverged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_divergent_layer: Option<String>,
+    /// Max absolute element-wise difference at that layer; absent for a shape mismatch or when
+    /// nothing diverged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_abs_diff: Option<f64>,
+    /// How many layers were numerically compared (both sides present and tensor-valued).
+    pub num_layers_compared: u64,
+    pub rtol: f64,
+    pub atol: f64,
+    /// Human-readable attributed cause; absent when the causal experiment did not run. When an
+    /// `attribution` is present this is its `summary` (a denormalized convenience, ADR-034).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested_cause: Option<String>,
+    /// Structured pass-level causal attribution; absent when the causal experiment did not run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribution: Option<DivergenceAttribution>,
+}
+
+/// The pass-level causal attribution for a [`Divergence`] (nested; ADR-032 / ADR-034).
+///
+/// Pass-level only: `torch._inductor.config` exposes pass-level toggles, not per-node fusion
+/// control, so `responsible_passes` names the inductor pass(es) whose disabling removes the
+/// divergence — never a specific fused node. Mirrors the Python `CausalAttribution` 1:1.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DivergenceAttribution {
+    /// True iff disabling `responsible_passes` made eager and compiled agree.
+    pub attributed: bool,
+    /// Minimal set of inductor passes whose disabling removes the divergence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub responsible_passes: Vec<String>,
+    pub summary: String,
+    /// How many recompile-and-recheck probes the experiment ran (cost transparency).
+    pub num_probes: u64,
+}
