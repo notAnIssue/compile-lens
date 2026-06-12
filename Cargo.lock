@@ -201,6 +201,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 name = "cls-analyzer"
 version = "0.5.0"
 dependencies = [
+ "cls-correctness-db",
  "cls-errors",
  "cls-schema",
  "criterion",
