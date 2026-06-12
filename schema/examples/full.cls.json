@@ -120,6 +120,23 @@
       "applies_to_user_torch_version": true
     }
   ],
+  "divergences": [
+    {
+      "divergence_id": "dv_001",
+      "first_divergent_layer": "decoder.layers.3.mlp.fc2",
+      "max_abs_diff": 0.297,
+      "num_layers_compared": 48,
+      "rtol": 0.001,
+      "atol": 1e-05,
+      "suggested_cause": "divergence removed when inductor pass(es) disabled: post_grad_custom_post_pass — pass-level attribution (torch._inductor.config exposes pass-level toggles, not per-node fusion control)",
+      "attribution": {
+        "attributed": true,
+        "responsible_passes": ["post_grad_custom_post_pass"],
+        "summary": "divergence removed when inductor pass(es) disabled: post_grad_custom_post_pass — pass-level attribution (torch._inductor.config exposes pass-level toggles, not per-node fusion control)",
+        "num_probes": 8
+      }
+    }
+  ],
   "kernels": [
     {
       "kernel_id": "k_001",
