@@ -91,7 +91,14 @@ class DivergenceSession:
     def _register(self, model: Any, store: dict[str, Any]) -> None:
         # Hook every named submodule except the root itself (name == ""). Submodule names are the
         # alignment key: the same architecture gives the same qualified names on both sides.
-        for name, module in model.named_modules():
+        #
+        # Unwrap a torch.compile OptimizedModule first. It wraps the real model under `_orig_mod`,
+        # which prefixes every submodule path ("_orig_mod.2" instead of "2"). Hooking the wrapper
+        # would store paths that never align with the eager side's, so `captured_modules()` would be
+        # empty and the localizer would silently report no divergence. The compiled forward runs
+        # `_orig_mod`'s submodules, so hooks registered on them fire during the compiled run.
+        target = getattr(model, "_orig_mod", model)
+        for name, module in target.named_modules():
             if not name:
                 continue
             self._handles.append(module.register_forward_hook(_make_hook(name, store)))
