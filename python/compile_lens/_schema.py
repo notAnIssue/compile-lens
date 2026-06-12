@@ -167,6 +167,34 @@ class LintFinding(_Model):
     applies_to_user_torch_version: bool | None = None
 
 
+# ── divergence (Tool 3; mirror records.rs Divergence / DivergenceAttribution, ADR-034) ───
+class DivergenceAttribution(_Model):
+    """Pass-level causal attribution for a divergence (ADR-032 / ADR-034). Pass-level only:
+    ``responsible_passes`` names the inductor pass(es) whose disabling removes the divergence,
+    never a fused node."""
+
+    attributed: bool
+    responsible_passes: list[str] = Field(default_factory=list)
+    summary: str
+    num_probes: int
+
+
+class Divergence(_Model):
+    """One eager-vs-compiled divergence finding (``divergences[]``). An *analysis result*, so a
+    normalized array record like ``lint_findings`` (ADR-021/034); the attribution is nested.
+    ``first_divergent_layer`` is absent when nothing diverged; ``max_abs_diff`` is absent for a
+    shape mismatch or no divergence."""
+
+    divergence_id: str
+    first_divergent_layer: str | None = None
+    max_abs_diff: float | None = None
+    num_layers_compared: int
+    rtol: float
+    atol: float
+    suggested_cause: str | None = None
+    attribution: DivergenceAttribution | None = None
+
+
 # ── kernels + roofline (mirror kernels.rs) ──────────────────────────────────────────────
 class LaunchConfig(_Model):
     grid: list[int] = Field(default_factory=list)
@@ -311,6 +339,7 @@ class ClsArtifact(_Model):
     compile_phases: list[CompilePhase] = Field(default_factory=list)
     iterations: list[Iteration] = Field(default_factory=list)
     lint_findings: list[LintFinding] = Field(default_factory=list)
+    divergences: list[Divergence] = Field(default_factory=list)
     kernels: list[Kernel] = Field(default_factory=list)
     roofline_predictions: list[RooflinePrediction] = Field(default_factory=list)
 
