@@ -96,3 +96,25 @@ def test_non_tensor_layers_are_skipped() -> None:
 def test_findings_is_exported_dataclass() -> None:
     f = DivergenceFindings(None, None, 0, 1e-3, 1e-5)
     assert f.suggested_cause is None  # filled by the causal experiment later
+
+
+def test_localizes_against_a_real_compiled_module() -> None:
+    """The localizer must work when ``model_compiled`` is a genuine ``torch.compile`` module — that
+    is the tool's whole purpose. A compiled ``OptimizedModule`` wraps the original under
+    ``_orig_mod``, so its submodule paths are prefixed (``_orig_mod.2`` vs eager's ``2``); without
+    unwrapping, the two sides never align by name and the localizer silently reports *no*
+    divergence. Compile one side for real, perturb a layer, and confirm localization to it."""
+    eager = _model()
+    src = _model()
+    src.load_state_dict(eager.state_dict())  # identical, then perturb layer "2"
+    with torch.no_grad():
+        src[2].weight.add_(1.0)
+    compiled = torch.compile(src)
+    x = torch.randn(2, 4)
+    with divergence_session(eager, compiled) as div:
+        eager(x)
+        compiled(x)
+    findings = div.report()
+    # Both sides captured the same paths (the compiled side unwrapped to align with eager).
+    assert div.captured_modules() == ["0", "1", "2"]
+    assert findings.first_divergent_layer == "2"
