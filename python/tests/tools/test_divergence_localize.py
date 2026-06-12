@@ -47,6 +47,26 @@ def test_localizes_the_first_divergent_layer() -> None:
     assert findings.max_abs_diff is not None and findings.max_abs_diff > 0
 
 
+def test_localizes_a_non_finite_layer() -> None:
+    """A compiled-side bug that makes a layer emit non-finite values (inf/NaN) is the headline Tool
+    3 case (numerical-divergence localization). Inject it into one side and confirm the localizer
+    pins that layer, not a downstream one the non-finite values then poison."""
+    a = _model()
+    b = _model()
+    b.load_state_dict(a.state_dict())  # identical, then make layer "2" emit non-finite output
+    with torch.no_grad():
+        b[2].weight.fill_(float("inf"))  # finite input -> inf/NaN at layer "2"
+    x = torch.randn(2, 4)
+    with divergence_session(a, b) as div:
+        a(x)
+        b(x)
+    findings = div.report()
+    assert findings.first_divergent_layer == "2"
+    assert findings.diverged
+    # Sanity: the compiled side really is non-finite there (a NaN/inf case, not a small drift).
+    assert not torch.isfinite(div.compiled_activations["2"]).all()
+
+
 def test_tolerance_default_vs_custom() -> None:
     # A tiny perturbation: within the default tolerance, but a tight tolerance flags it.
     eager = {"layer": torch.zeros(4)}
