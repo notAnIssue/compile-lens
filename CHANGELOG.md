@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Tool 4 (`compile-lint`) complete: a static linter for `torch.compile` correctness anti-patterns. It
+scans source with the standard `ast` module — never executing it — flags candidates, and joins them
+against a curated correctness database where every entry cites a real PyTorch issue, a minimal repro,
+and a workaround; severity is downgraded for torch versions where the bug is already fixed, and a
+surviving `high` exits non-zero to gate CI. Detection is database-driven: a pattern's detector rule
+configures the scanner and the analyzer reads its evidence — the two meet on the pattern name. It is
+a **lint, not an oracle** — it covers the statically detectable slice of the correctness-bug
+taxonomy and its tool page documents exactly what it cannot catch.
+
 Tool 3 (`divergence`) complete: localize → attribute → view. It finds *where* an eager model and its
 `torch.compile`d version first diverge numerically, then attributes *which* inductor pass introduced
 it, and persists the result so a prior session can be viewed without re-running the model. Unlike the
@@ -15,6 +24,19 @@ reads the stored `.cls.json` and does not.
 
 ### Added
 
+- `cl compile-lint <path> --db <db.toml> -o <out.cls.json>` (Python front-end) — scan a `.py` file
+  or directory with the Layer-1 AST scanner and write candidate findings; the database's detector
+  rules drive operator-family detection (without `--db`, only the structural pattern fires).
+- `cl compile-lint <session.cls.json> --db <db.toml> [--format markdown|json|sarif] [--min-severity LEVEL]`
+  (Rust analysis) — join candidates with the correctness database, escalate severity by the user's
+  torch version, and render; SARIF 2.1.0 for GitHub Code Scanning. Exits 1 if any `high` survives.
+- Two-layer detection (ADR-032): a structural AST pre-filter plus an optional functionalized-graph
+  confirmation for input-mutation patterns. Suppression at three scopes — `# compile-lint:
+  ignore[...]` (line), `# compile-lint: file-ignore[...]` (file), `@compile_lint_ignore("...")`
+  (function).
+- A curated correctness database (`data/correctness_db.toml`, ADR-035/036): each pattern carries a
+  real PyTorch issue, a minimal repro, a workaround, and positive/negative fixtures, with the
+  detection rule alongside the evidence so adding a pattern is a data edit.
 - `cl divergence-view <session.cls.json> [--format markdown|json]` — render the eager-vs-compiled
   divergence findings stored in a session. View-only: no analysis step, no torch, no recompilation.
 - `divergence_session(eager, compiled)` (Python) — lockstep per-submodule activation capture that
