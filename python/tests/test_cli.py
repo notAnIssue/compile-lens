@@ -129,3 +129,44 @@ def test_compile_lint_default_redaction_is_strict(tmp_path: Path) -> None:
     out = tmp_path / "out.cls.json"
     cli.main(["compile-lint", str(src), "--output", str(out)])
     assert from_json(out.read_text()).session.redaction_policy.value == "default-strict"
+
+
+# --db drives operator-family detection (ADR-036); the real production database is the source.
+_PROD_DB = REPO_ROOT / "data" / "correctness_db.toml"
+_DIAG_SRC = "out = torch.diag_embed(x, dim1=-1)\n"
+
+
+def test_compile_lint_with_db_detects_operator_pattern(tmp_path: Path) -> None:
+    src = tmp_path / "model.py"
+    src.write_text(_DIAG_SRC)
+    out = tmp_path / "out.cls.json"
+    rc = cli.main(["compile-lint", str(src), "--db", str(_PROD_DB), "--output", str(out)])
+    assert rc == 0
+    categories = {f.pattern_category for f in from_json(out.read_text()).lint_findings}
+    assert "diag_embed_nondefault_dim" in categories
+
+
+def test_compile_lint_without_db_skips_operator_pattern(tmp_path: Path) -> None:
+    # No --db -> no operator rules -> the diag_embed call is not flagged (structural-only).
+    src = tmp_path / "model.py"
+    src.write_text(_DIAG_SRC)
+    out = tmp_path / "out.cls.json"
+    rc = cli.main(["compile-lint", str(src), "--output", str(out)])
+    assert rc == 0
+    assert from_json(out.read_text()).lint_findings == []
+
+
+def test_compile_lint_bad_db_returns_error(tmp_path: Path) -> None:
+    src = tmp_path / "model.py"
+    src.write_text(_DIAG_SRC)
+    rc = cli.main(
+        [
+            "compile-lint",
+            str(src),
+            "--db",
+            str(tmp_path / "nope.toml"),
+            "--output",
+            str(tmp_path / "out.cls.json"),
+        ]
+    )
+    assert rc == 3
