@@ -194,7 +194,7 @@
         "n_samples": 24
       },
       "pruning_decision": {
-        "mode": "safe_prune_enabled",
+        "mode": "aggressive",
         "threshold_rank_correlation": 0.8,
         "configs_total": 24,
         "configs_predicted_top_k": 5,

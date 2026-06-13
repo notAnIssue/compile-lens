@@ -116,7 +116,7 @@ pub struct Calibration {
     pub n_samples: Option<u64>,
 }
 
-/// Autotune pruning decision (`safe_prune_enabled` / `partial_prune` /
+/// Autotune pruning decision (`aggressive` / `moderate` /
 /// `disabled_fallback_full_sweep`). `mode` kept `String` for forward compat.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PruningDecision {

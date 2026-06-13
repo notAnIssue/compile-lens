@@ -352,7 +352,7 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "mode": { "type": "string", "enum": ["safe_prune_enabled", "partial_prune", "disabled_fallback_full_sweep"] },
+            "mode": { "type": "string", "enum": ["aggressive", "moderate", "disabled_fallback_full_sweep"] },
             "threshold_rank_correlation": { "type": "number" },
             "configs_total": { "type": "integer", "minimum": 0 },
             "configs_predicted_top_k": { "type": "integer", "minimum": 0 },
