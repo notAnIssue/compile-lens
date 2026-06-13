@@ -18,6 +18,7 @@ v0 covers the two highest-frequency patterns from Li et al. 2026:
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 
 #: Tensor methods that return a **view/alias** sharing storage with the source (not a copy). A copy
@@ -53,16 +54,23 @@ class LintHit:
 
 
 class LintPatternScanner:
-    """Scan Python source for Tool 4's v0 anti-patterns, purely via the AST.
+    """Scan Python source for Tool 4's anti-patterns, purely via the AST.
 
-    ``watched_ops`` maps an operator name to the set of parameter names whose non-default use is
-    flagged as ``operator_non_default_param``. It defaults to empty: with no watch list that pattern
-    matches nothing (the real list is supplied by the correctness database), while
-    ``in_place_op_on_alias`` is structural and always active.
+    ``operator_rules`` drives the operator-family patterns (ADR-036): it maps an operator name to a
+    ``{parameter_name: pattern_category}`` table. When the scanner sees that operator called with a
+    watched parameter, it emits a candidate whose ``pattern_category`` is **that pattern's name** —
+    so the analyzer can look the exact pattern up in the correctness database. The real rules are
+    supplied by the database (via the front-end); it defaults to empty, so with no rules the
+    operator family matches nothing while the structural ``in_place_op_on_alias`` is always active.
     """
 
-    def __init__(self, watched_ops: dict[str, set[str]] | None = None) -> None:
-        self.watched_ops: dict[str, set[str]] = dict(watched_ops) if watched_ops is not None else {}
+    def __init__(self, operator_rules: dict[str, dict[str, str]] | None = None) -> None:
+        # operator -> {param_name -> pattern_category}; copied so the caller's dicts aren't aliased.
+        self.operator_rules: dict[str, dict[str, str]] = (
+            {op: dict(params) for op, params in operator_rules.items()}
+            if operator_rules is not None
+            else {}
+        )
 
     def scan(self, source: str, filename: str = "<unknown>") -> list[LintHit]:
         # Parse only — the user's code is never compiled-and-run, so scanning is side-effect free.
@@ -71,7 +79,7 @@ class LintPatternScanner:
         hits: list[LintHit] = []
         hits.extend(self._find_in_place_on_alias(tree, aliases))
         hits.extend(self._find_operator_non_default_param(tree))
-        return hits
+        return _apply_suppressions(hits, source, tree)
 
     # ── alias tracking ──────────────────────────────────────────────────────────────────
 
@@ -152,17 +160,21 @@ class LintPatternScanner:
             if not isinstance(node, ast.Call):
                 continue
             op_name = self._call_op_name(node)
-            if op_name is None or op_name not in self.watched_ops:
+            if op_name is None or op_name not in self.operator_rules:
                 continue
-            watched_params = self.watched_ops[op_name]
+            param_categories = self.operator_rules[op_name]
             for kw in node.keywords:
-                if kw.arg is not None and kw.arg in watched_params:
+                if kw.arg is not None and kw.arg in param_categories:
+                    # Emit the database pattern's own name as the category, so the analyzer's
+                    # lookup-by-name lands on this exact pattern's evidence (ADR-036).
+                    category = param_categories[kw.arg]
                     hits.append(
                         LintHit(
-                            "operator_non_default_param",
+                            category,
                             node.lineno,
                             node.col_offset,
-                            f"`{op_name}` called with non-default `{kw.arg}` (Li et al. §3.2.2)",
+                            f"`{op_name}` called with watched param `{kw.arg}` "
+                            f"({category}, Li et al. §3.2.2)",
                         )
                     )
                     break
@@ -176,3 +188,76 @@ class LintPatternScanner:
         if isinstance(call.func, ast.Attribute):
             return call.func.attr
         return None
+
+
+# ── suppression (line / function / file level) ──────────────────────────────────────────
+#
+# The line and file markers are comments, which `ast` discards, so they are scanned from the source
+# text. `file-ignore` is matched first (and on its own line), so it is never mistaken for the
+# `ignore` marker, whose pattern requires `ignore` to follow `compile-lint:` directly.
+
+#: `# compile-lint: ignore[pattern, …]` — suppress these patterns on this line.
+_LINE_IGNORE = re.compile(r"#\s*compile-lint:\s*ignore\[([^\]]+)\]")
+#: `# compile-lint: file-ignore[pattern, …]` — suppress these patterns in the whole file.
+_FILE_IGNORE = re.compile(r"#\s*compile-lint:\s*file-ignore\[([^\]]+)\]")
+
+
+def _split_patterns(group: str) -> set[str]:
+    return {p.strip() for p in group.split(",") if p.strip()}
+
+
+def _apply_suppressions(hits: list[LintHit], source: str, tree: ast.AST) -> list[LintHit]:
+    """Drop hits silenced by a line / file comment marker or a function decorator."""
+    file_ignored: set[str] = set()
+    line_ignored: dict[int, set[str]] = {}
+    for lineno, line in enumerate(source.splitlines(), start=1):
+        if match := _FILE_IGNORE.search(line):
+            file_ignored |= _split_patterns(match.group(1))
+        elif match := _LINE_IGNORE.search(line):
+            line_ignored.setdefault(lineno, set()).update(_split_patterns(match.group(1)))
+
+    func_ignored = _collect_function_ignores(tree)
+
+    def suppressed(hit: LintHit) -> bool:
+        if hit.pattern_name in file_ignored:
+            return True
+        if hit.pattern_name in line_ignored.get(hit.line, set()):
+            return True
+        return any(
+            start <= hit.line <= end and hit.pattern_name in patterns
+            for start, end, patterns in func_ignored
+        )
+
+    return [hit for hit in hits if not suppressed(hit)]
+
+
+def _collect_function_ignores(tree: ast.AST) -> list[tuple[int, int, set[str]]]:
+    """`(start, end, patterns)` for each function decorated with `@compile_lint_ignore(...)`."""
+    out: list[tuple[int, int, set[str]]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            patterns = _decorator_patterns(node)
+            if patterns:
+                out.append((node.lineno, node.end_lineno or node.lineno, patterns))
+    return out
+
+
+def _decorator_patterns(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    patterns: set[str] = set()
+    for decorator in node.decorator_list:
+        if (
+            isinstance(decorator, ast.Call)
+            and _callee_name(decorator.func) == "compile_lint_ignore"
+        ):
+            for arg in decorator.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    patterns.add(arg.value)
+    return patterns
+
+
+def _callee_name(func: ast.expr) -> str | None:
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None

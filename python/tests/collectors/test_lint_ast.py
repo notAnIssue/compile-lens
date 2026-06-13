@@ -50,22 +50,36 @@ def test_dunder_method_is_not_treated_as_in_place() -> None:
     assert "in_place_op_on_alias" not in _names(LintPatternScanner().scan(src))
 
 
-# ── operator_non_default_param (Li et al. §3.2.2) ───────────────────────────────────────
+# ── operator-family patterns: granular categories (Li et al. §3.2.2, ADR-036) ───────────
+#
+# operator_rules maps operator -> {param: pattern_category}; the scanner emits *that category*
+# (the database pattern's own name) so the analyzer can look the exact pattern up.
+
+_RULES = {"some_op": {"flag": "some_op_flag_bug"}}
 
 
-def test_watched_op_with_non_default_param_is_flagged() -> None:
-    scanner = LintPatternScanner(watched_ops={"some_op": {"flag"}})
-    assert "operator_non_default_param" in _names(scanner.scan("some_op(x, flag=True)\n"))
+def test_watched_op_with_the_param_emits_the_patterns_category() -> None:
+    scanner = LintPatternScanner(operator_rules=_RULES)
+    # The emitted category is the rule's pattern name, not a generic label.
+    assert "some_op_flag_bug" in _names(scanner.scan("some_op(x, flag=True)\n"))
 
 
 def test_watched_op_without_the_param_is_not_flagged() -> None:
-    scanner = LintPatternScanner(watched_ops={"some_op": {"flag"}})
-    assert "operator_non_default_param" not in _names(scanner.scan("some_op(x)\n"))
+    scanner = LintPatternScanner(operator_rules=_RULES)
+    assert "some_op_flag_bug" not in _names(scanner.scan("some_op(x)\n"))
 
 
 def test_method_form_of_watched_op_is_flagged() -> None:
-    scanner = LintPatternScanner(watched_ops={"some_op": {"flag"}})
-    assert "operator_non_default_param" in _names(scanner.scan("t.some_op(flag=2)\n"))
+    scanner = LintPatternScanner(operator_rules=_RULES)
+    assert "some_op_flag_bug" in _names(scanner.scan("t.some_op(flag=2)\n"))
+
+
+def test_two_operator_rules_emit_distinct_categories() -> None:
+    # The fan-out: different (operator, param) rules produce different categories, so each
+    # operator-family bug maps to its own database entry.
+    scanner = LintPatternScanner(operator_rules={"op_a": {"p": "cat_a"}, "op_b": {"q": "cat_b"}})
+    found = _names(scanner.scan("op_a(x, p=1)\nop_b(y, q=2)\n"))
+    assert "cat_a" in found and "cat_b" in found
 
 
 # ── the no-execution guarantee + finding shape ──────────────────────────────────────────
