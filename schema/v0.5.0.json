@@ -353,7 +353,7 @@
           "additionalProperties": true,
           "properties": {
             "mode": { "type": "string", "enum": ["safe_prune_enabled", "partial_prune", "disabled_fallback_full_sweep"] },
-            "threshold_pearson": { "type": "number" },
+            "threshold_rank_correlation": { "type": "number" },
             "configs_total": { "type": "integer", "minimum": 0 },
             "configs_predicted_top_k": { "type": "integer", "minimum": 0 },
             "configs_measured": { "type": "integer", "minimum": 0 }

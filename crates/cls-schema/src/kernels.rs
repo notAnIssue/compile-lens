@@ -123,7 +123,7 @@ pub struct PruningDecision {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub threshold_pearson: Option<f64>,
+    pub threshold_rank_correlation: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configs_total: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
