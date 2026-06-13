@@ -1,4 +1,14 @@
-//! `cls-roofline` — skeleton crate. Real implementation lands in a later change.
+//! `cls-roofline` — the kernel roofline cost model for Tool 5 (`kernel-roofline`).
+//!
+//! The model has three layers: a theoretical lower bound (Williams roofline), an empirical
+//! predictor, and a calibrated pruning decision. This crate currently implements **Layer 1** and
+//! the **GPU spec registry** it draws on; Layers 2 and 3 land in later changes.
+//!
+//! Entry point: [`RooflineCostModel::for_gpu`] — bind the model to a registered GPU by name, then
+//! analyze a kernel's features into a `cls_schema::RooflinePrediction`.
 
-/// Placeholder so the crate compiles as part of the workspace.
-pub fn placeholder() {}
+pub mod gpu;
+mod roofline;
+
+pub use gpu::{known_names, lookup, GpuSpec};
+pub use roofline::{BoundType, RooflineCostModel};
