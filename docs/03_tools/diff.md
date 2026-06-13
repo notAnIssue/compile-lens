@@ -145,11 +145,16 @@ For a non-commutative operand swap — `head` computes `sub(b, a)` where `base` 
 _match coverage 1.00 · anchor uniqueness 1.00_
 ```
 
-`--format json` emits the whole `IrGraphDiff` (the machine-readable contract — `added` / `removed` /
-`modified`, the `matched` triples with their confidence, `match_coverage`, `anchor_uniqueness_ratio`);
-`--format text` is the same summary in plain console output. The matcher is also a pure library
-function — `cls_wl_diff::diff_graphs(before, after) -> IrGraphDiff`, deterministic and torch-free — if
-you want to embed it rather than shell out.
+`cl diff` also carries the **cache-stability diff** (Tool 2b, Mode A): below the graph diff it reports
+whether the change introduced a cache-stability regression — the head run becoming unstable where the
+base was steady, or new recompilations the base did not have. On graph-only sessions (no captured
+`iterations[]`) it reads "No cache-stability regression."
+
+`--format json` emits a combined object — `{ "graph_diff": <IrGraphDiff>, "cache_stability": <diff> }`
+(the `IrGraphDiff` is `added` / `removed` / `modified`, the `matched` triples with their confidence,
+`match_coverage`, `anchor_uniqueness_ratio`); `--format text` is the same summary in plain console
+output. The matcher is also a pure library function — `cls_wl_diff::diff_graphs(before, after) ->
+IrGraphDiff`, deterministic and torch-free — if you want to embed it rather than shell out.
 
 > A Python binding for the diff is not yet shipped; today the surfaces are the `cl diff` command and
 > the Rust library function above.

@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.5.0",
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000000",
+    "timestamp": "2026-05-21T10:30:00Z",
+    "torch_version": "2.6.0",
+    "redaction_policy": "default-strict"
+  },
+  "compiled_graphs": [],
+  "iterations": [
+    {
+      "iteration_index": 0,
+      "cache_hit": false,
+      "output_signature": "sig_const",
+      "internal_state_snapshot": { "module_attrs_changed": [] }
+    },
+    {
+      "iteration_index": 1,
+      "cache_hit": true,
+      "output_signature": "sig_const",
+      "internal_state_snapshot": { "module_attrs_changed": ["step_counter"] }
+    },
+    {
+      "iteration_index": 2,
+      "cache_hit": true,
+      "output_signature": "sig_const",
+      "internal_state_snapshot": { "module_attrs_changed": ["step_counter"] }
+    }
+  ]
+}

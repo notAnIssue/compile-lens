@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Tool 4 (`compile-lint`) complete: a static linter for `torch.compile` correctness anti-patterns. It
+scans source with the standard `ast` module — never executing it — flags candidates, and joins them
+against a curated correctness database where every entry cites a real PyTorch issue, a minimal repro,
+and a workaround; severity is downgraded for torch versions where the bug is already fixed, and a
+surviving `high` exits non-zero to gate CI. Detection is database-driven: a pattern's detector rule
+configures the scanner and the analyzer reads its evidence — the two meet on the pattern name. It is
+a **lint, not an oracle** — it covers the statically detectable slice of the correctness-bug
+taxonomy and its tool page documents exactly what it cannot catch.
+
+Tool 3 (`divergence`) complete: localize → attribute → view. It finds *where* an eager model and its
+`torch.compile`d version first diverge numerically, then attributes *which* inductor pass introduced
+it, and persists the result so a prior session can be viewed without re-running the model. Unlike the
+static-analysis tools, the capture side runs both models and so depends on `torch`; the view side
+reads the stored `.cls.json` and does not.
+
+### Added
+
+- `cl compile-lint <path> --db <db.toml> -o <out.cls.json>` (Python front-end) — scan a `.py` file
+  or directory with the Layer-1 AST scanner and write candidate findings; the database's detector
+  rules drive operator-family detection (without `--db`, only the structural pattern fires).
+- `cl compile-lint <session.cls.json> --db <db.toml> [--format markdown|json|sarif] [--min-severity LEVEL]`
+  (Rust analysis) — join candidates with the correctness database, escalate severity by the user's
+  torch version, and render; SARIF 2.1.0 for GitHub Code Scanning. Exits 1 if any `high` survives.
+- Two-layer detection (ADR-032): a structural AST pre-filter plus an optional functionalized-graph
+  confirmation for input-mutation patterns. Suppression at three scopes — `# compile-lint:
+  ignore[...]` (line), `# compile-lint: file-ignore[...]` (file), `@compile_lint_ignore("...")`
+  (function).
+- A curated correctness database (`data/correctness_db.toml`, ADR-035/036): each pattern carries a
+  real PyTorch issue, a minimal repro, a workaround, and positive/negative fixtures, with the
+  detection rule alongside the evidence so adding a pattern is a data edit.
+- `cl divergence-view <session.cls.json> [--format markdown|json]` — render the eager-vs-compiled
+  divergence findings stored in a session. View-only: no analysis step, no torch, no recompilation.
+- `divergence_session(eager, compiled)` (Python) — lockstep per-submodule activation capture that
+  localizes the first divergent layer in eager execution order. It unwraps a `torch.compile`
+  `OptimizedModule` so the compiled side's submodule paths align with the eager side's, which makes
+  localization work against a real compiled model and not only against two eager ones.
+- `accuracy_minifier()` (Python) — engages dynamo's accuracy minifier (`repro_level=4`,
+  `repro_after="aot"`) for the block and restores the prior config on exit, so a confirmed
+  divergence yields a minimized reproducer; it degrades gracefully on a torch without the repro
+  config.
+- `attribute_divergence(model, inputs)` (Python) — pass-level causal attribution: it toggles
+  candidate inductor passes off, recompiles, and minimizes (delta-debugging-style) to the pass(es)
+  whose disabling removes the divergence. **Pass-level only** — `torch._inductor.config` exposes
+  pass-level toggles, not per-node fusion control.
+- A `divergences[]` section in the `.cls.json` schema (the `Divergence` record with a nested
+  pass-level `attribution`; ADR-034), so findings persist for the view CLI and the hero report.
+
+## [0.5.0-alpha.3] — 2026-06-11
+
+Tool 2b (`cache-stability`) complete: detect a silently-wrong `torch.compile` cache bug — a model's
+internal state drifts between iterations, the compiled graph is reused from cache, and the output
+freezes, so the numerics are stale while the run looks fine. Mode B (single-run anomaly) ships as
+`cl cache-stability`; Mode A (diff-based regression) rides on `cl diff`. Both read the per-iteration
+data the collector already captures — a behavioral check, distinct from Tool 2a's structural graph
+diff.
+
+### Added
+
+- `cl diff` now also reports the **cache-stability diff** (Tool 2b, Mode A): below the graph diff it
+  flags a regression the change introduced — the head run becoming unstable where the base was steady,
+  or recompilations the head triggers that the base did not. Clean on graph-only sessions.
+- `cl cache-stability <session.cls.json> [--format markdown|json]` — Tool 2b (Mode B). Detects a
+  silently-wrong `torch.compile` cache bug: across a run's iterations, the module's internal state
+  drifts, the compiled graph is reused from cache, and the output stays frozen — so the numerics are
+  stale while the run looks fine (Li et al. 2026, Listing 2). It reads the per-iteration data the
+  collector already captures (no new capture).
+
+### Changed
+
+- `cl diff --format json` now emits a combined object `{ "graph_diff": …, "cache_stability": … }`
+  instead of the bare graph diff, so the cache-stability diff rides alongside it.
+
 ## [0.5.0-alpha.2] — 2026-06-10
 
 Tool 2a (`compile-diff`) complete: capture → diff → render, end-to-end from the CLI. A
@@ -360,7 +432,8 @@ top of (Tool 1 recompile aggregator, Tool 2a compile diff, Hero `cl.session()`).
 - A typed schema migration ladder (kept as detect-and-refuse until V1, per the
   pre-V1 D10 exception in the design doc).
 
-[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.2...HEAD
+[Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.3...HEAD
+[0.5.0-alpha.3]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [0.5.0-alpha.1]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.0...v0.5.0-alpha.1
 [0.5.0-alpha.0]: https://github.com/notAnIssue/compile-lens/releases/tag/v0.5.0-alpha.0

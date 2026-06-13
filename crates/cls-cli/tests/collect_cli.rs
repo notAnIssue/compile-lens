@@ -224,6 +224,11 @@ fn diff_runs_on_fixture_pairs_and_classifies_changes() {
             stdout.contains("## Compile Diff"),
             "{scenario}: markdown header missing:\n{stdout}"
         );
+        // cl diff also carries the cache-stability diff section (clean on graph-only fixtures).
+        assert!(
+            stdout.contains("## Cache Stability (diff)"),
+            "{scenario}: cache-stability section missing:\n{stdout}"
+        );
     }
 
     // And classifies each correctly, through the CLI end to end.
@@ -240,5 +245,74 @@ fn diff_runs_on_fixture_pairs_and_classifies_changes() {
     assert!(
         run("commutative_add").1.contains("No structural changes"),
         "commutative_add should be silent"
+    );
+}
+
+#[test]
+fn cache_stability_detects_listing2_fixture() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/cache_stability/listing2.cls.json");
+    let out = cl()
+        .arg("cache-stability")
+        .arg(&fixture)
+        .arg("--format")
+        .arg("markdown")
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "cl cache-stability should exit 0; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("## Cache Stability"),
+        "header missing:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("iteration 1") && stdout.contains("step_counter"),
+        "Listing 2 finding missing:\n{stdout}"
+    );
+}
+
+#[test]
+fn cache_stability_nonexistent_session_exits_three() {
+    let out = cl()
+        .arg("cache-stability")
+        .arg("/nonexistent/session.cls.json")
+        .stderr(Stdio::piped())
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "missing file → CLS-E0001 exit 3"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("CLS-E0001"),
+        "diagnostic missing CLS-E0001 marker"
+    );
+}
+
+/// False-positive baseline: a *normal* stateful session — state drifts, but the cache correctly
+/// invalidates (recompiles) so the output moves — must produce no finding.
+#[test]
+fn cache_stability_no_false_positive_on_normal_stateful() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/cache_stability/normal_stateful.cls.json");
+    let out = cl()
+        .arg("cache-stability")
+        .arg(&fixture)
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(out.status.code(), Some(0), "should exit 0");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No cache-stability anomalies detected"),
+        "normal stateful session must not false-positive:\n{stdout}"
     );
 }

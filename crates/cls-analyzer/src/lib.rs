@@ -8,6 +8,9 @@
 //! [`recompile::analyze`] clusters a session's guard failures into dynamic-axis-attributed
 //! findings ([`recompile_cluster`] holds the algorithm). Ranked suggestions land in a later PR.
 
+pub mod cache_stability;
+pub mod divergence;
+pub mod lint;
 pub mod recompile;
 pub mod recompile_cluster;
 pub mod recompile_diff;

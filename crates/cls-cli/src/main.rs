@@ -111,6 +111,54 @@ enum Command {
         format: SummaryFormat,
     },
 
+    /// Detect cache-stability anomalies in a single collected session (Tool 2b,
+    /// Mode B). Flags iterations where the module's internal state drifted, the
+    /// compiled graph was reused from cache, and the output stayed frozen — a
+    /// silently-wrong mutable-state-not-invalidated bug (Li et al. 2026, Listing 2).
+    CacheStability {
+        /// The collected `.cls.json` session to analyze.
+        session: std::path::PathBuf,
+
+        /// Output format: `markdown` (default) or `json`.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+    },
+
+    /// View Tool 3's eager-vs-compiled divergence findings already stored in a
+    /// `.cls.json` (ADR-034). View-only: it reads and renders the captured
+    /// `divergences[]` and never re-runs the model, so it needs no torch.
+    DivergenceView {
+        /// The collected `.cls.json` session to view.
+        session: std::path::PathBuf,
+
+        /// Output format: `markdown` (default) or `json`.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+    },
+
+    /// Analyze a session's candidate lint findings (Tool 4): join them with the
+    /// correctness database, escalate severity, and render. Exits 1 if any `high`
+    /// finding survives, so it can gate CI. `--format sarif` emits SARIF 2.1.0 for
+    /// GitHub Code Scanning. (The Python front-end scans source into the session;
+    /// this is the analysis half.)
+    CompileLint {
+        /// The collected `.cls.json` session whose `lint_findings` to analyze.
+        session: std::path::PathBuf,
+
+        /// The correctness-database TOML. Absent → an empty database, so every
+        /// candidate (having no cited issue) is dropped.
+        #[arg(long, value_name = "PATH")]
+        db: Option<std::path::PathBuf>,
+
+        /// Output format: `markdown` (default), `json`, or `sarif`.
+        #[arg(long, value_enum, default_value_t = LintFormat::Markdown)]
+        format: LintFormat,
+
+        /// Drop findings below this severity (`info` < `warning` < `high`).
+        #[arg(long, value_name = "LEVEL")]
+        min_severity: Option<String>,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -159,6 +207,15 @@ impl From<SummaryFormat> for cls_analyzer::recompile_render::Format {
             SummaryFormat::Text => Self::Text,
         }
     }
+}
+
+/// Output format for `cl compile-lint --format`. Adds `sarif` (GitHub Code Scanning) on top of the
+/// usual markdown/json.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum LintFormat {
+    Markdown,
+    Json,
+    Sarif,
 }
 
 /// Install a global tracing subscriber from `CLS_LOG` / `CLS_LOG_FORMAT`.
@@ -230,6 +287,17 @@ fn run(cli: Cli) -> Result<(), ClsError> {
         }) => recompile_summary(session, baseline, format),
 
         Some(Command::Diff { base, head, format }) => diff(base, head, format),
+
+        Some(Command::CacheStability { session, format }) => cache_stability(session, format),
+
+        Some(Command::DivergenceView { session, format }) => divergence_view(session, format),
+
+        Some(Command::CompileLint {
+            session,
+            db,
+            format,
+            min_severity,
+        }) => compile_lint(session, db, format, min_severity),
 
         Some(Command::Migrate {
             input,
@@ -329,6 +397,116 @@ fn recompile_summary(
 /// `cl diff` skeleton (Tool 2a). Validates that both the `--base` and `--head`
 /// artifacts are reachable, then exits with the typed `NotYetImplemented` error.
 /// The WL-signature diff algorithm (`cls-wl-diff`) lands in upcoming Phase 2 PRs.
+fn cache_stability(session: std::path::PathBuf, format: SummaryFormat) -> Result<(), ClsError> {
+    // `load_artifact` reads + version-gates + parses; a missing file surfaces as CLS-E0001.
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let findings = cls_analyzer::cache_stability::analyze(&artifact);
+    // The subcommand exposes markdown|json; Text falls back to Markdown.
+    let render_format = match format {
+        SummaryFormat::Json => cls_analyzer::cache_stability::Format::Json,
+        SummaryFormat::Markdown | SummaryFormat::Text => {
+            cls_analyzer::cache_stability::Format::Markdown
+        }
+    };
+    print!(
+        "{}",
+        cls_analyzer::cache_stability::render(&findings, render_format)
+    );
+    Ok(())
+}
+
+/// `cl divergence-view`: load a `.cls.json` and render its stored `divergences[]` (ADR-034).
+///
+/// View-only — there is no analysis step and no torch: the eager-vs-compiled comparison ran when
+/// the artifact was written, so viewing a prior session is a pure read-and-format of the records.
+fn divergence_view(session: std::path::PathBuf, format: SummaryFormat) -> Result<(), ClsError> {
+    // `load_artifact` reads + version-gates + parses; a missing file surfaces as CLS-E0001.
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let render_format = match format {
+        SummaryFormat::Json => cls_analyzer::divergence::Format::Json,
+        SummaryFormat::Markdown | SummaryFormat::Text => cls_analyzer::divergence::Format::Markdown,
+    };
+    print!(
+        "{}",
+        cls_analyzer::divergence::render(&artifact.divergences, render_format)
+    );
+    Ok(())
+}
+
+/// `cl compile-lint`: join the session's candidate `lint_findings` with the correctness database,
+/// render in the chosen format, and exit 1 if any `high` finding survives so the command can gate
+/// CI. The Python front-end runs the source scan that fills `lint_findings`; this is the
+/// analysis-and-report half — the two meet on disk (ADR-006), never over FFI.
+fn compile_lint(
+    session: std::path::PathBuf,
+    db: Option<std::path::PathBuf>,
+    format: LintFormat,
+    min_severity: Option<String>,
+) -> Result<(), ClsError> {
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let pattern_db = load_pattern_db(db.as_deref())?;
+    let mut report = cls_analyzer::lint::analyze(&artifact, &pattern_db);
+
+    if let Some(floor) = min_severity.as_deref() {
+        let floor_rank = severity_rank(floor).ok_or_else(|| ClsError::InvalidCliArgs {
+            detail: format!("--min-severity `{floor}` must be one of: info, warning, high"),
+        })?;
+        report
+            .findings
+            .retain(|f| severity_rank(&f.severity).unwrap_or(0) >= floor_rank);
+    }
+
+    let rendered = match format {
+        LintFormat::Sarif => {
+            cls_sarif::to_sarif_json(&report.findings, "compile-lens", env!("CARGO_PKG_VERSION"))
+        }
+        LintFormat::Json => cls_analyzer::lint::render(&report, cls_analyzer::lint::Format::Json),
+        LintFormat::Markdown => {
+            cls_analyzer::lint::render(&report, cls_analyzer::lint::Format::Markdown)
+        }
+    };
+    print!("{rendered}");
+
+    // CI gate: any surviving `high` finding fails the run with exit 1 — kept distinct from the
+    // typed-error exit code 3 so a script can tell "lint found a real bug" from "lint itself errored".
+    if report.findings.iter().any(|f| f.severity == "high") {
+        process::exit(1);
+    }
+    Ok(())
+}
+
+/// Load the correctness database from a TOML path, or an empty database when `--db` is absent. An
+/// empty database drops every candidate (no cited issue → not a finding), which is the
+/// lint-not-oracle default: with no evidence to stand on, the tool reports nothing.
+fn load_pattern_db(
+    path: Option<&std::path::Path>,
+) -> Result<cls_correctness_db::PatternDb, ClsError> {
+    let Some(path) = path else {
+        return Ok(cls_correctness_db::PatternDb::default());
+    };
+    let toml = std::fs::read_to_string(path).map_err(|source| ClsError::IoError {
+        path: path.display().to_string(),
+        source,
+    })?;
+    cls_correctness_db::PatternDb::from_toml(&toml).map_err(|source| ClsError::InvalidCliArgs {
+        detail: format!(
+            "--db `{}` is not a valid correctness database: {source}",
+            path.display()
+        ),
+    })
+}
+
+/// Rank a severity label for `--min-severity` comparison; `None` for an unrecognized label so a
+/// typo'd floor is rejected (CLS-E0004) rather than silently passing every finding.
+fn severity_rank(severity: &str) -> Option<u8> {
+    match severity {
+        "high" => Some(3),
+        "warning" => Some(2),
+        "info" => Some(1),
+        _ => None,
+    }
+}
+
 fn diff(
     base: std::path::PathBuf,
     head: std::path::PathBuf,
@@ -343,15 +521,44 @@ fn diff(
     // artifact with no compiled graph diffs as an empty graph rather than erroring.
     let before_graph = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&before));
     let after_graph = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&after));
-    let result = cls_wl_diff::diff_graphs(&before_graph, &after_graph);
+    let graph_diff = cls_wl_diff::diff_graphs(&before_graph, &after_graph);
 
-    let render_format = match format {
-        SummaryFormat::Markdown => cls_wl_diff::Format::Markdown,
-        SummaryFormat::Json => cls_wl_diff::Format::Json,
-        SummaryFormat::Text => cls_wl_diff::Format::Text,
-    };
-    print!("{}", cls_wl_diff::render(&result, render_format));
+    // `cl diff` also carries the cache-stability diff (Tool 2b Mode A): a regression in cache
+    // behavior the change introduced. On graph-only sessions (no `iterations[]`) this is clean.
+    let cache_stability = cls_analyzer::cache_stability::analyze_diff(&before, &after);
+
+    match format {
+        SummaryFormat::Json => {
+            // Combined machine-readable contract: the graph diff and the cache-stability diff.
+            let report = DiffReport {
+                graph_diff: &graph_diff,
+                cache_stability: &cache_stability,
+            };
+            print!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("DiffReport serializes")
+            );
+        }
+        SummaryFormat::Markdown | SummaryFormat::Text => {
+            let graph_format = match format {
+                SummaryFormat::Text => cls_wl_diff::Format::Text,
+                _ => cls_wl_diff::Format::Markdown,
+            };
+            print!("{}", cls_wl_diff::render(&graph_diff, graph_format));
+            print!(
+                "\n{}",
+                cls_analyzer::cache_stability::render_diff_markdown(&cache_stability)
+            );
+        }
+    }
     Ok(())
+}
+
+/// The combined `cl diff --format json` payload: the graph diff plus the cache-stability diff.
+#[derive(serde::Serialize)]
+struct DiffReport<'a> {
+    graph_diff: &'a cls_wl_diff::IrGraphDiff,
+    cache_stability: &'a cls_analyzer::cache_stability::CacheStabilityDiff,
 }
 
 /// The node-level structure of an artifact's first compiled graph, or empty if it has none.

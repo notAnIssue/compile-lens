@@ -1,0 +1,13 @@
+# Minimal correctness database for the `cl compile-lint` CLI tests. One pattern, carrying the four
+# ADR-013 mandatory evidence items (minimal_repro / pytorch_issue / workaround / fixtures) plus the
+# Li et al. section and the version the upstream fix landed in.
+[[patterns]]
+name = "in_place_op_on_alias"
+minimal_repro = "y = x.expand(2, 3); y[0] = 1"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/114302"
+workaround = "y = x.expand(2, 3).clone()"
+li_et_al_section = "§3.2.3"
+fixed_in_version = "2.5"
+[patterns.fixtures]
+positive = "p"
+negative = "n"

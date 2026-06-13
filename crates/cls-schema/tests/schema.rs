@@ -87,6 +87,25 @@ fn test_full_example_deserialize() {
         Some("memory")
     );
 
+    // Tool 3 divergence finding, with its nested causal attribution (ADR-034).
+    let divergence = &artifact.divergences[0];
+    assert_eq!(
+        divergence.first_divergent_layer.as_deref(),
+        Some("decoder.layers.3.mlp.fc2")
+    );
+    assert_eq!(divergence.max_abs_diff, Some(0.297));
+    assert_eq!(divergence.num_layers_compared, 48);
+    let attribution = divergence
+        .attribution
+        .as_ref()
+        .expect("attribution present");
+    assert!(attribution.attributed);
+    assert_eq!(
+        attribution.responsible_passes,
+        vec!["post_grad_custom_post_pass"]
+    );
+    assert_eq!(attribution.num_probes, 8);
+
     // number-typed feature arrives as f64 even though it's written as an integer literal.
     let flops = artifact.kernels[0]
         .features
@@ -156,6 +175,47 @@ fn test_fx_nodes_absent_when_not_captured() {
     };
     let json = serde_json::to_string(&graph).unwrap();
     assert!(!json.contains("nodes"));
+}
+
+// ── test_divergence_round_trips_and_skips_when_empty ─────────────────────────────────────
+#[test]
+fn test_divergence_round_trips_and_skips_when_empty() {
+    use cls_schema::{Divergence, DivergenceAttribution};
+
+    // A no-divergence finding (first_divergent_layer / max_abs_diff / attribution all absent)
+    // round-trips without acquiring or losing fields, and the absent optionals are not emitted.
+    let mut artifact = parse(MINIMAL);
+    artifact.divergences.push(Divergence {
+        divergence_id: "dv_x".into(),
+        first_divergent_layer: None,
+        max_abs_diff: None,
+        num_layers_compared: 12,
+        rtol: 1e-3,
+        atol: 1e-5,
+        suggested_cause: None,
+        attribution: None,
+    });
+    let json = serde_json::to_string(&artifact).expect("serialize");
+    let reparsed: ClsArtifact = serde_json::from_str(&json).expect("re-deserialize");
+    assert_eq!(artifact, reparsed);
+    assert!(!json.contains("first_divergent_layer"));
+    assert!(!json.contains("attribution"));
+
+    // An attributed finding carries its nested causal attribution through the cycle (ADR-034).
+    artifact.divergences[0].attribution = Some(DivergenceAttribution {
+        attributed: true,
+        responsible_passes: vec!["epilogue_fusion".into()],
+        summary: "divergence removed when inductor pass(es) disabled: epilogue_fusion".into(),
+        num_probes: 6,
+    });
+    let json2 = serde_json::to_string(&artifact).expect("serialize");
+    let reparsed2: ClsArtifact = serde_json::from_str(&json2).expect("re-deserialize");
+    assert_eq!(artifact, reparsed2);
+
+    // An empty divergences array is omitted entirely (skip_serializing_if), so a non-Tool-3
+    // artifact does not grow a spurious "divergences":[].
+    let empty_json = serde_json::to_string(&parse(MINIMAL)).expect("serialize");
+    assert!(!empty_json.contains("divergences"));
 }
 
 // ── test_session_round_trip_serde ───────────────────────────────────────────────────────
