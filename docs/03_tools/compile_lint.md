@@ -53,9 +53,49 @@ cl compile-lint path/to/model.py --db data/correctness_db.toml -o lint.cls.json
 cl compile-lint lint.cls.json --db data/correctness_db.toml --format sarif > lint.sarif
 ```
 
-Without `--db`, only the structural pattern fires (no operator rules). Findings can be suppressed
-in source with `# compile-lint: ignore[pattern]`, a `# compile-lint: file-ignore[pattern]` comment,
-or a `@compile_lint_ignore("pattern")` decorator.
+Without `--db`, only the structural `in_place_op_on_alias` pattern fires (there are no operator
+rules to load).
+
+### Options
+
+- `--db <PATH>` — the correctness database. Drives operator-family detection on the scan side and
+  supplies evidence on the analysis side; pass the same file to both steps.
+- `--format markdown|json|sarif` — analysis output. `sarif` (SARIF 2.1.0) uploads to GitHub Code
+  Scanning, which renders a `high` finding as an `error` annotation.
+- `--min-severity info|warning|high` — drop findings below this floor before rendering. An
+  unrecognized value is rejected, rather than silently passing everything.
+
+### Suppressing a finding
+
+When a finding is a known false positive or an accepted risk, silence it in source — narrowly, and
+ideally with a reason in an adjacent comment. Three scopes, each naming the pattern explicitly so an
+unrelated pattern on the same line or in the same file still fires:
+
+```python
+y[idx] = v  # compile-lint: ignore[in_place_op_on_alias]      -- this line only
+
+# compile-lint: file-ignore[in_place_op_on_alias]             -- anywhere; the whole file
+
+@compile_lint_ignore("in_place_op_on_alias")                  -- the decorated function
+def f(x): ...
+```
+
+The line and file markers are comments — the scanner reads them from the source text, since `ast`
+discards comments — while the decorator is read from the AST.
+
+### Exit codes (gating CI)
+
+The analysis step exits with a code a CI script can branch on:
+
+| Code | Meaning |
+|---|---|
+| 0 | clean — no `high` finding survived |
+| 1 | a `high` finding survived — the CI gate |
+| 3 | a file could not be read |
+| 6 | an invalid argument (e.g. a malformed `--db`, or an unknown `--min-severity`) |
+
+Exit 1 (a real finding) is kept distinct from 3 / 6 (the tool itself erroring), so a pipeline can
+tell "the linter found a bug" from "the linter broke."
 
 ## Part C — Detection coverage & limitations
 
