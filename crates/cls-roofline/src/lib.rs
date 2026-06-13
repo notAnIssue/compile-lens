@@ -9,6 +9,7 @@
 
 pub mod gpu;
 mod predictor;
+mod pruning;
 mod roofline;
 
 pub use gpu::{known_names, lookup, GpuSpec};
@@ -16,4 +17,5 @@ pub use predictor::{
     block_size_penalty, occupancy, occupancy_penalty, register_pressure_penalty_us,
     EmpiricalPrediction, LAUNCH_OVERHEAD_US,
 };
+pub use pruning::{prune_mode, pruning_decision, spearman_correlation, PruneMode};
 pub use roofline::{BoundType, RooflineCostModel};

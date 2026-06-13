@@ -251,7 +251,7 @@ class Calibration(_Model):
 
 class PruningDecision(_Model):
     mode: str | None = None  # plain str; forward-compat
-    threshold_pearson: float | None = None
+    threshold_rank_correlation: float | None = None
     configs_total: int | None = None
     configs_predicted_top_k: int | None = None
     configs_measured: int | None = None

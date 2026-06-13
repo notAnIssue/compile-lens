@@ -116,14 +116,14 @@ pub struct Calibration {
     pub n_samples: Option<u64>,
 }
 
-/// Autotune pruning decision (`safe_prune_enabled` / `partial_prune` /
+/// Autotune pruning decision (`aggressive` / `moderate` /
 /// `disabled_fallback_full_sweep`). `mode` kept `String` for forward compat.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PruningDecision {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub threshold_pearson: Option<f64>,
+    pub threshold_rank_correlation: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configs_total: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
