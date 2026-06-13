@@ -136,6 +136,29 @@ enum Command {
         format: SummaryFormat,
     },
 
+    /// Analyze a session's candidate lint findings (Tool 4): join them with the
+    /// correctness database, escalate severity, and render. Exits 1 if any `high`
+    /// finding survives, so it can gate CI. `--format sarif` emits SARIF 2.1.0 for
+    /// GitHub Code Scanning. (The Python front-end scans source into the session;
+    /// this is the analysis half.)
+    CompileLint {
+        /// The collected `.cls.json` session whose `lint_findings` to analyze.
+        session: std::path::PathBuf,
+
+        /// The correctness-database TOML. Absent → an empty database, so every
+        /// candidate (having no cited issue) is dropped.
+        #[arg(long, value_name = "PATH")]
+        db: Option<std::path::PathBuf>,
+
+        /// Output format: `markdown` (default), `json`, or `sarif`.
+        #[arg(long, value_enum, default_value_t = LintFormat::Markdown)]
+        format: LintFormat,
+
+        /// Drop findings below this severity (`info` < `warning` < `high`).
+        #[arg(long, value_name = "LEVEL")]
+        min_severity: Option<String>,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -184,6 +207,15 @@ impl From<SummaryFormat> for cls_analyzer::recompile_render::Format {
             SummaryFormat::Text => Self::Text,
         }
     }
+}
+
+/// Output format for `cl compile-lint --format`. Adds `sarif` (GitHub Code Scanning) on top of the
+/// usual markdown/json.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum LintFormat {
+    Markdown,
+    Json,
+    Sarif,
 }
 
 /// Install a global tracing subscriber from `CLS_LOG` / `CLS_LOG_FORMAT`.
@@ -259,6 +291,13 @@ fn run(cli: Cli) -> Result<(), ClsError> {
         Some(Command::CacheStability { session, format }) => cache_stability(session, format),
 
         Some(Command::DivergenceView { session, format }) => divergence_view(session, format),
+
+        Some(Command::CompileLint {
+            session,
+            db,
+            format,
+            min_severity,
+        }) => compile_lint(session, db, format, min_severity),
 
         Some(Command::Migrate {
             input,
@@ -392,6 +431,80 @@ fn divergence_view(session: std::path::PathBuf, format: SummaryFormat) -> Result
         cls_analyzer::divergence::render(&artifact.divergences, render_format)
     );
     Ok(())
+}
+
+/// `cl compile-lint`: join the session's candidate `lint_findings` with the correctness database,
+/// render in the chosen format, and exit 1 if any `high` finding survives so the command can gate
+/// CI. The Python front-end runs the source scan that fills `lint_findings`; this is the
+/// analysis-and-report half — the two meet on disk (ADR-006), never over FFI.
+fn compile_lint(
+    session: std::path::PathBuf,
+    db: Option<std::path::PathBuf>,
+    format: LintFormat,
+    min_severity: Option<String>,
+) -> Result<(), ClsError> {
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let pattern_db = load_pattern_db(db.as_deref())?;
+    let mut report = cls_analyzer::lint::analyze(&artifact, &pattern_db);
+
+    if let Some(floor) = min_severity.as_deref() {
+        let floor_rank = severity_rank(floor).ok_or_else(|| ClsError::InvalidCliArgs {
+            detail: format!("--min-severity `{floor}` must be one of: info, warning, high"),
+        })?;
+        report
+            .findings
+            .retain(|f| severity_rank(&f.severity).unwrap_or(0) >= floor_rank);
+    }
+
+    let rendered = match format {
+        LintFormat::Sarif => {
+            cls_sarif::to_sarif_json(&report.findings, "compile-lens", env!("CARGO_PKG_VERSION"))
+        }
+        LintFormat::Json => cls_analyzer::lint::render(&report, cls_analyzer::lint::Format::Json),
+        LintFormat::Markdown => {
+            cls_analyzer::lint::render(&report, cls_analyzer::lint::Format::Markdown)
+        }
+    };
+    print!("{rendered}");
+
+    // CI gate: any surviving `high` finding fails the run with exit 1 — kept distinct from the
+    // typed-error exit code 3 so a script can tell "lint found a real bug" from "lint itself errored".
+    if report.findings.iter().any(|f| f.severity == "high") {
+        process::exit(1);
+    }
+    Ok(())
+}
+
+/// Load the correctness database from a TOML path, or an empty database when `--db` is absent. An
+/// empty database drops every candidate (no cited issue → not a finding), which is the
+/// lint-not-oracle default: with no evidence to stand on, the tool reports nothing.
+fn load_pattern_db(
+    path: Option<&std::path::Path>,
+) -> Result<cls_correctness_db::PatternDb, ClsError> {
+    let Some(path) = path else {
+        return Ok(cls_correctness_db::PatternDb::default());
+    };
+    let toml = std::fs::read_to_string(path).map_err(|source| ClsError::IoError {
+        path: path.display().to_string(),
+        source,
+    })?;
+    cls_correctness_db::PatternDb::from_toml(&toml).map_err(|source| ClsError::InvalidCliArgs {
+        detail: format!(
+            "--db `{}` is not a valid correctness database: {source}",
+            path.display()
+        ),
+    })
+}
+
+/// Rank a severity label for `--min-severity` comparison; `None` for an unrecognized label so a
+/// typo'd floor is rejected (CLS-E0004) rather than silently passing every finding.
+fn severity_rank(severity: &str) -> Option<u8> {
+    match severity {
+        "high" => Some(3),
+        "warning" => Some(2),
+        "info" => Some(1),
+        _ => None,
+    }
 }
 
 fn diff(
