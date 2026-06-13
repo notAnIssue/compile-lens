@@ -58,9 +58,29 @@ def _add_collect_args(sp: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_compile_lint_args(sp: argparse.ArgumentParser) -> None:
+    """Wire ``cl compile-lint``'s flags. The Python front-end *scans* source into a ``.cls.json``;
+    the Rust ``cl compile-lint <artifact>`` then analyzes it against the correctness database
+    (the design doc ADR-006; the unified single-command front-end is the Phase 7 hero)."""
+    sp.add_argument("path", metavar="PATH", help="a .py file, or a directory of .py files, to scan")
+    sp.add_argument(
+        "-o",
+        "--output",
+        metavar="PATH",
+        required=True,
+        help="where to write the .cls.json artifact",
+    )
+    sp.add_argument(
+        "--redaction",
+        choices=[p.value for p in RedactionPolicy],
+        default=RedactionPolicy.DEFAULT_STRICT.value,
+        help="redaction policy applied at capture time (default: default-strict)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
-    """Build the top-level ``cl`` argument parser. ``collect`` carries real flags; the
-    other subcommands are bare placeholders until their phase."""
+    """Build the top-level ``cl`` argument parser. ``collect`` and ``compile-lint`` carry real
+    flags; the other subcommands are bare placeholders until their phase."""
     parser = argparse.ArgumentParser(
         prog="cl",
         description="compile-lens — diagnostics for torch.compile production observability.",
@@ -71,6 +91,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp = subparsers.add_parser(name, help=help_text)
         if name == "collect":
             _add_collect_args(sp)
+        elif name == "compile-lint":
+            _add_compile_lint_args(sp)
     return parser
 
 
@@ -113,6 +135,30 @@ def _run_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_compile_lint(args: argparse.Namespace) -> int:
+    """Scan ``args.path`` for Tool 4 anti-patterns and write the candidate ``.cls.json``.
+
+    This is the scan half (Layer-1, static AST); run the Rust ``cl compile-lint <output>`` to
+    analyze it against the correctness database and gate CI on its exit code (the design doc ADR-006).
+    """
+    from compile_lens.collectors.lint_collect import LintCollector
+
+    collector = LintCollector(args.output, redaction_policy=args.redaction)
+    try:
+        count = collector.scan_path(args.path)
+    except FileNotFoundError as exc:
+        print(f"cl compile-lint: source not found — {exc}", file=sys.stderr)
+        return 3
+    except (SyntaxError, UnicodeDecodeError) as exc:
+        print(f"cl compile-lint: could not parse source — {exc}", file=sys.stderr)
+        return 3
+
+    written = collector.finalize()
+    print(f"wrote {written} ({count} candidate finding(s))")
+    print(f"  analyze it with: cl compile-lint {written}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
     parser = build_parser()
@@ -122,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "collect":
         return _run_collect(args)
+    if args.command == "compile-lint":
+        return _run_compile_lint(args)
     print(
         f"cl {args.command}: not implemented yet (v{__version__} skeleton).",
         file=sys.stderr,
