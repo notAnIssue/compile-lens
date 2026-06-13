@@ -12,7 +12,9 @@ path = "src/main.rs"
 [dependencies]
 clap = { workspace = true }
 cls-analyzer = { path = "../cls-analyzer" }
+cls-correctness-db = { path = "../cls-correctness-db" }
 cls-errors = { path = "../cls-errors" }
+cls-sarif = { path = "../cls-sarif" }
 cls-schema = { path = "../cls-schema" }
 cls-schema-migrate = { path = "../cls-schema-migrate" }
 cls-wl-diff = { path = "../cls-wl-diff" }

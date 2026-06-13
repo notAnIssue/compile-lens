@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.5.0",
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000000",
+    "timestamp": "2026-06-12T00:00:00Z",
+    "torch_version": "2.4.0",
+    "redaction_policy": "default-strict"
+  },
+  "lint_findings": [
+    {
+      "finding_id": "f1",
+      "pattern_category": "in_place_op_on_alias",
+      "severity": "medium",
+      "source_location": { "file": "model.py", "line_start": 47 },
+      "trigger_pattern": "expand_then_indexed_assign",
+      "confidence": "ast_exact_match"
+    }
+  ]
+}
