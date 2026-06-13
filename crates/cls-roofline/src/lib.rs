@@ -8,7 +8,12 @@
 //! analyze a kernel's features into a `cls_schema::RooflinePrediction`.
 
 pub mod gpu;
+mod predictor;
 mod roofline;
 
 pub use gpu::{known_names, lookup, GpuSpec};
+pub use predictor::{
+    block_size_penalty, occupancy, occupancy_penalty, register_pressure_penalty_us,
+    EmpiricalPrediction, LAUNCH_OVERHEAD_US,
+};
 pub use roofline::{BoundType, RooflineCostModel};
