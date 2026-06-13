@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tomllib
 
 from compile_lens import __version__
 from compile_lens._schema import RedactionPolicy
@@ -69,6 +70,12 @@ def _add_compile_lint_args(sp: argparse.ArgumentParser) -> None:
         metavar="PATH",
         required=True,
         help="where to write the .cls.json artifact",
+    )
+    sp.add_argument(
+        "--db",
+        metavar="PATH",
+        help="correctness-database TOML; its operator-family rules drive detection. Without it, "
+        "only the structural in_place_op_on_alias pattern fires.",
     )
     sp.add_argument(
         "--redaction",
@@ -142,8 +149,17 @@ def _run_compile_lint(args: argparse.Namespace) -> int:
     analyze it against the correctness database and gate CI on its exit code (the design doc ADR-006).
     """
     from compile_lens.collectors.lint_collect import LintCollector
+    from compile_lens.correctness_db import load_operator_rules
 
-    collector = LintCollector(args.output, redaction_policy=args.redaction)
+    # The database's [detector] rules drive operator-family detection (ADR-036); without --db only
+    # the structural pattern fires. The same database is passed to the Rust analyzer for evidence.
+    try:
+        rules = load_operator_rules(args.db) if args.db else None
+    except (FileNotFoundError, tomllib.TOMLDecodeError, KeyError) as exc:
+        print(f"cl compile-lint: could not read --db — {exc}", file=sys.stderr)
+        return 3
+
+    collector = LintCollector(args.output, operator_rules=rules, redaction_policy=args.redaction)
     try:
         count = collector.scan_path(args.path)
     except FileNotFoundError as exc:
