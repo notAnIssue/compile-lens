@@ -262,6 +262,9 @@ version = "0.5.0"
 [[package]]
 name = "cls-roofline"
 version = "0.5.0"
+dependencies = [
+ "cls-schema",
+]
 
 [[package]]
 name = "cls-sarif"
