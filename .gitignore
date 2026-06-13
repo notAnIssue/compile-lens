@@ -29,6 +29,13 @@ __pycache__/
 .venv/
 venv/
 
+# Coverage / test artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
 # Build artifacts
 dist/
 build/
