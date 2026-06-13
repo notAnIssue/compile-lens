@@ -108,3 +108,22 @@ def test_strict_keeps_the_relative_source_path(tmp_path: Path, monkeypatch) -> N
     artifact = from_json(out.read_text())
     assert artifact.session.redaction_policy.value == "default-strict"
     assert artifact.lint_findings[0].source_location.file == "pkg/model.py"
+
+
+# An in-place-on-alias write, silenced by an inline suppression comment.
+SUPPRESSED_SRC = "y = x.expand(2, 3)\ny[0] = 1  # compile-lint: ignore[in_place_op_on_alias]\n"
+
+
+def test_suppression_comment_is_honored_through_the_collector(tmp_path: Path) -> None:
+    # The scanner applies suppression inside scan(), so a suppressed finding must never reach the
+    # written artifact — suppression works end-to-end through the collector, not just in unit tests.
+    src = tmp_path / "model.py"
+    src.write_text(SUPPRESSED_SRC)
+    out = tmp_path / "out.cls.json"
+
+    collector = _collector(out)
+    added = collector.scan_path(src)
+    collector.finalize()
+
+    assert added == 0
+    assert from_json(out.read_text()).lint_findings == []
