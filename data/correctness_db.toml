@@ -73,3 +73,105 @@ params = ["dim1", "dim2", "offset"]
 positive = "out = torch.diag_embed(x, dim1=-1)"
 # Negative: no watched parameter — default dims, the handled path.
 negative = "out = torch.diag_embed(x)"
+
+[[patterns]]
+name = "interpolate_nondefault_mode"
+li_et_al_section = "§3.2.2"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/160840"
+minimal_repro = '''
+@torch.compile
+def model(x):
+    # bicubic / trilinear interpolation has diverged from eager under compile (mode-dependent).
+    return torch.nn.functional.interpolate(x, scale_factor=2.0, mode="bicubic", align_corners=False)
+'''
+workaround = '''
+# Run the interpolation outside the compiled region until the affected mode's lowering is fixed
+# (e.g. wrap the call with torch.compiler.disable), or avoid the non-default mode under compile.
+'''
+
+[patterns.detector]
+operator = "interpolate"
+params = ["mode", "align_corners"]
+
+[patterns.fixtures]
+# Positive: a non-default interpolation mode is explicitly requested.
+positive = 'out = F.interpolate(x, scale_factor=2, mode="bicubic")'
+# Negative: default mode (nearest), no watched parameter.
+negative = "out = F.interpolate(x, scale_factor=2)"
+
+[[patterns]]
+name = "index_put_accumulate"
+li_et_al_section = "§3.2.3"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/95679"
+minimal_repro = '''
+@torch.compile
+def model(x, idx, vals):
+    # accumulate=True with duplicate indices: the inductor backend can drop the accumulation.
+    x.index_put_((idx,), vals, accumulate=True)
+    return x
+'''
+workaround = '''
+# Use index_add_ for the accumulating scatter, or run the index_put_ outside the compiled region:
+x.index_add_(0, idx, vals)
+'''
+
+[patterns.detector]
+operator = "index_put_"
+params = ["accumulate"]
+
+[patterns.fixtures]
+# Positive: the accumulate flag is explicitly set.
+positive = "x.index_put_((idx,), vals, accumulate=True)"
+# Negative: a plain index_put_ (no accumulation) is unaffected.
+negative = "x.index_put_((idx,), vals)"
+
+[[patterns]]
+name = "pad_reflect_mode"
+li_et_al_section = "§3.2.2"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/100793"
+minimal_repro = '''
+@torch.compile
+def model(x):
+    # mode="reflect" has produced a wrong backward gradient under compile (constant/replicate ok).
+    return torch.nn.functional.pad(x, (1, 1), mode="reflect")
+'''
+workaround = '''
+# Use a mode without the regression if acceptable (constant / replicate / circular), or run the
+# pad outside the compiled region.
+out = torch.nn.functional.pad(x, (1, 1), mode="replicate")
+'''
+
+[patterns.detector]
+operator = "pad"
+params = ["mode"]
+
+[patterns.fixtures]
+# Positive: the reflect mode is explicitly requested.
+positive = 'out = F.pad(x, (1, 1), mode="reflect")'
+# Negative: default (constant) padding, no watched parameter.
+negative = "out = F.pad(x, (1, 1))"
+
+[[patterns]]
+name = "repeat_interleave_output_size"
+li_et_al_section = "§3.2.2"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/147160"
+minimal_repro = '''
+@torch.compile
+def model(x, repeats):
+    # A specified output_size hits a missing inductor lowering and can produce wrong results.
+    return torch.repeat_interleave(x, repeats, output_size=6)
+'''
+workaround = '''
+# Let output_size be inferred (omit it), or run repeat_interleave outside the compiled region:
+out = torch.repeat_interleave(x, repeats)
+'''
+
+[patterns.detector]
+operator = "repeat_interleave"
+params = ["output_size"]
+
+[patterns.fixtures]
+# Positive: output_size is explicitly specified.
+positive = "out = torch.repeat_interleave(x, repeats, output_size=6)"
+# Negative: no output_size — the inferred path.
+negative = "out = torch.repeat_interleave(x, repeats)"
