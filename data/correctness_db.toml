@@ -1,0 +1,75 @@
+# compile-lens correctness database — known `torch.compile` correctness anti-patterns.
+#
+# This is the production database Tool 4 (`compile-lint`) joins scanner candidates against. Every
+# entry carries the four ADR-013 mandatory items — a minimal repro, a REAL PyTorch issue link, a
+# workaround, and positive + negative fixtures — so each finding cites evidence, not a guess. The
+# four items are required fields, so a malformed entry fails to load.
+#
+# Two detection modes (ADR-036):
+#   - structural patterns (e.g. in_place_op_on_alias) are recognized by the scanner's built-in
+#     structural logic; they have no [detector].
+#   - operator-family patterns carry a [detector] naming the operator + the parameters whose
+#     explicit use flags a candidate; the scanner emits the pattern's own `name` as the category.
+#
+# This is a SEED (the detection mechanism proved with verified patterns, one per mode). The bulk of
+# the catalogue (toward the 30+ of the taxonomy) is authored later, each entry verified the same way.
+
+[[patterns]]
+name = "in_place_op_on_alias"
+li_et_al_section = "§3.2.3"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/114302"
+minimal_repro = '''
+@torch.compile
+def model(x):
+    y = x.expand(2, *x.shape)
+    y[0, 0] = 5          # in-place write through an alias of x
+    return y
+
+x = torch.tensor([0, 1, 2, 3, 4, 5])
+model(x)
+# eager: x stays [0,1,2,3,4,5]; compiled: x mutated to [5,2,4,6,8,10] — wrong.
+'''
+workaround = '''
+# Break the alias before the in-place write, so the mutation cannot escape into the source:
+y = x.expand(2, *x.shape).clone()
+y[0, 0] = 5
+'''
+
+[patterns.fixtures]
+# Positive: `expand` returns an alias; the indexed write through it is the anti-pattern.
+positive = '''
+y = x.expand(2, 3)
+y[0] = 1
+'''
+# Negative: a write through a fresh `clone` shares no storage, so it is safe.
+negative = '''
+y = x.clone()
+y[0] = 1
+'''
+
+[[patterns]]
+name = "diag_embed_nondefault_dim"
+li_et_al_section = "§3.2.2"
+pytorch_issue = "https://github.com/pytorch/pytorch/issues/117019"
+minimal_repro = '''
+@torch.compile
+def model(x):
+    # A non-default (negative) dim1 trips the operator decomposition.
+    return torch.diag_embed(input=x, dim1=-1, dim2=0, offset=1)
+# compiled output diverges from eager for the negative-dim configuration.
+'''
+workaround = '''
+# Pass non-negative dim1 / dim2 (normalize negatives against the output rank) so the
+# decomposition takes its handled path:
+return torch.diag_embed(input=x, dim1=x.ndim, dim2=0, offset=1)
+'''
+
+[patterns.detector]
+operator = "diag_embed"
+params = ["dim1", "dim2", "offset"]
+
+[patterns.fixtures]
+# Positive: a watched parameter (dim1) is explicitly passed.
+positive = "out = torch.diag_embed(x, dim1=-1)"
+# Negative: no watched parameter — default dims, the handled path.
+negative = "out = torch.diag_embed(x)"

@@ -46,11 +46,10 @@ class LintCollector:
 
     Args:
         output_path: where :meth:`finalize` writes the ``.cls.json``.
-        watched_ops: optional ``operator -> watched parameter names`` map forwarded to the scanner.
-            Without it only the structural ``in_place_op_on_alias`` pattern fires — the
-            ``operator_non_default_param`` watch list is database-supplied, and surfacing it through
-            the CLI needs the database schema to carry watched ops (a follow-up tied to the pattern
-            database work).
+        operator_rules: optional ``operator -> {parameter: pattern_category}`` map forwarded to the
+            scanner (ADR-036). Without it only the structural ``in_place_op_on_alias`` fires; the
+            operator-family rules come from the correctness database, which the front-end reads and
+            passes here (that wiring lands separately — for now this stays an explicit hook).
         redaction_policy: classification for the session (D11), coerced through
             :class:`RedactionPolicy` so an unknown value fails closed.
         session_id / timestamp / torch_version: session metadata; each defaults to a runtime value
@@ -62,7 +61,7 @@ class LintCollector:
         self,
         output_path: Path | str,
         *,
-        watched_ops: dict[str, set[str]] | None = None,
+        operator_rules: dict[str, dict[str, str]] | None = None,
         redaction_policy: RedactionPolicy | str = RedactionPolicy.DEFAULT_STRICT,
         session_id: str | None = None,
         timestamp: str | None = None,
@@ -70,7 +69,7 @@ class LintCollector:
     ) -> None:
         self.output_path = Path(output_path)
         self.redaction_policy = RedactionPolicy(redaction_policy)  # fail-closed (D11)
-        self._scanner = LintPatternScanner(watched_ops)
+        self._scanner = LintPatternScanner(operator_rules)
         self._session_id = session_id
         self._timestamp = timestamp
         self._torch_version = torch_version

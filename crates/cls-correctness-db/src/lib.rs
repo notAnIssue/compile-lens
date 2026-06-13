@@ -26,10 +26,28 @@ pub struct Fixtures {
     pub negative: String,
 }
 
+/// How the Layer-1 scanner recognizes an *operator-family* pattern (ADR-036): the high-level
+/// operator to watch and the parameter names whose explicit (non-default) use flags a candidate.
+///
+/// This is the database's half of DB-driven granular detection — the Python front-end reads it to
+/// configure the scanner so the scanner emits a candidate whose `pattern_category` equals this
+/// pattern's `name`, which the analyzer then looks up here for evidence. Structural patterns
+/// (e.g. `in_place_op_on_alias`) are detected without a `detector` and omit this field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Detector {
+    /// The operator to watch, by its call name (`diag_embed`, `polygamma`, …). Matches both the
+    /// free-function form `diag_embed(...)` and the method form `x.diag_embed(...)`.
+    pub operator: String,
+    /// Parameter names whose explicit keyword use flags a candidate. Layer-1 is static AST: it sees
+    /// that a parameter was *passed*, not its value, so this is a deliberately coarse proxy for
+    /// "non-default" — a candidate the database / Layer-2 / a human then confirm.
+    pub params: Vec<String>,
+}
+
 /// One known-buggy `torch.compile` anti-pattern.
 ///
 /// The four ADR-013 items — `minimal_repro`, `pytorch_issue`, `workaround`, `fixtures` — are
-/// required; everything else is optional metadata that refines severity or attribution.
+/// required; everything else is optional metadata that refines severity, attribution, or detection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pattern {
     /// Stable identifier, e.g. `in_place_op_on_alias`.
@@ -53,6 +71,10 @@ pub struct Pattern {
     /// have the final say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub severity: Option<String>,
+    /// Operator-family detection rule (ADR-036). Present for operator patterns, absent for
+    /// structural ones (which the scanner detects without a database rule).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detector: Option<Detector>,
 }
 
 /// The pattern database: a flat list of patterns, in authored (file) order.

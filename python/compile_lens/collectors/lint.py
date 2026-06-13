@@ -54,16 +54,23 @@ class LintHit:
 
 
 class LintPatternScanner:
-    """Scan Python source for Tool 4's v0 anti-patterns, purely via the AST.
+    """Scan Python source for Tool 4's anti-patterns, purely via the AST.
 
-    ``watched_ops`` maps an operator name to the set of parameter names whose non-default use is
-    flagged as ``operator_non_default_param``. It defaults to empty: with no watch list that pattern
-    matches nothing (the real list is supplied by the correctness database), while
-    ``in_place_op_on_alias`` is structural and always active.
+    ``operator_rules`` drives the operator-family patterns (ADR-036): it maps an operator name to a
+    ``{parameter_name: pattern_category}`` table. When the scanner sees that operator called with a
+    watched parameter, it emits a candidate whose ``pattern_category`` is **that pattern's name** —
+    so the analyzer can look the exact pattern up in the correctness database. The real rules are
+    supplied by the database (via the front-end); it defaults to empty, so with no rules the
+    operator family matches nothing while the structural ``in_place_op_on_alias`` is always active.
     """
 
-    def __init__(self, watched_ops: dict[str, set[str]] | None = None) -> None:
-        self.watched_ops: dict[str, set[str]] = dict(watched_ops) if watched_ops is not None else {}
+    def __init__(self, operator_rules: dict[str, dict[str, str]] | None = None) -> None:
+        # operator -> {param_name -> pattern_category}; copied so the caller's dicts aren't aliased.
+        self.operator_rules: dict[str, dict[str, str]] = (
+            {op: dict(params) for op, params in operator_rules.items()}
+            if operator_rules is not None
+            else {}
+        )
 
     def scan(self, source: str, filename: str = "<unknown>") -> list[LintHit]:
         # Parse only — the user's code is never compiled-and-run, so scanning is side-effect free.
@@ -153,17 +160,21 @@ class LintPatternScanner:
             if not isinstance(node, ast.Call):
                 continue
             op_name = self._call_op_name(node)
-            if op_name is None or op_name not in self.watched_ops:
+            if op_name is None or op_name not in self.operator_rules:
                 continue
-            watched_params = self.watched_ops[op_name]
+            param_categories = self.operator_rules[op_name]
             for kw in node.keywords:
-                if kw.arg is not None and kw.arg in watched_params:
+                if kw.arg is not None and kw.arg in param_categories:
+                    # Emit the database pattern's own name as the category, so the analyzer's
+                    # lookup-by-name lands on this exact pattern's evidence (ADR-036).
+                    category = param_categories[kw.arg]
                     hits.append(
                         LintHit(
-                            "operator_non_default_param",
+                            category,
                             node.lineno,
                             node.col_offset,
-                            f"`{op_name}` called with non-default `{kw.arg}` (Li et al. §3.2.2)",
+                            f"`{op_name}` called with watched param `{kw.arg}` "
+                            f"({category}, Li et al. §3.2.2)",
                         )
                     )
                     break
