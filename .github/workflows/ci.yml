@@ -35,15 +35,20 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # The three release-blocker correctness invariants of the compile-diff (design D7):
-      # operand-order handling, match coverage on real model graphs, and matching precision on the
-      # gold corpus. They also run inside `cargo test --workspace` in the test job; this dedicated
-      # job exists to make the gate visible — a red check here unambiguously means "do not release".
+      # Release-blocker correctness invariants (design D7). They also run inside
+      # `cargo test --workspace` in the test job; this dedicated job exists to make the gate visible —
+      # a red check here unambiguously means "do not release".
+      #
+      # compile-diff (Tool 2a): operand-order handling, match coverage on real model graphs, and
+      # matching precision on the gold corpus.
       - run: >
           cargo test -p cls-wl-diff
           --test operand_order_regression
           --test coverage_benchmark
           --test gold_precision
+      # kernel-roofline (Tool 5): the rank-correlation pruning gate is sound — prune only when the
+      # predicted ranking tracks the measured one, fall back to a full sweep otherwise.
+      - run: cargo test -p cls-roofline --test rank_correlation_invariant
 
   ruff-mypy:
     name: Python lint + typecheck
