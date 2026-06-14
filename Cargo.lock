@@ -222,6 +222,7 @@ version = "0.5.0"
 dependencies = [
  "cls-correctness-db",
  "cls-errors",
+ "cls-roofline",
  "cls-schema",
  "criterion",
  "indexmap",
