@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The fusion detector (Tool 6) now estimates HBM traffic end-to-end. The FX collector captures each
-node's output shape and dtype (read from `node.meta['val']`) as typed `FxNode` fields, and the
-analyzer derives each matched pattern's GEMM dimensions (M/N/K0/K1/dtype) and runs the cost model —
-so a `FusionOpportunity` now carries its baseline-vs-fused HBM byte traffic and estimated speedup,
-not just its location and suggested kernel. Shape capture is best-effort and additive: a graph
-written before this existed, or one with a dynamic (symbolic) shape, leaves the cost unset rather
-than guessing it (ADR-038).
+The fusion detector (Tool 6) is now usable from the CLI: `cl fusion-detect <session.cls.json>`
+matches CODA-style `GEMM-Residual-RMSNorm-GEMM` opportunities in a collected session's FX graph and
+reports them — pattern, FX-node location, shape, baseline-vs-fused HBM traffic, estimated speedup,
+and a suggested epilogue kernel — ranked by speedup, as `--format markdown|json`, with `--min-speedup`
+and `--top-k` to trim the report. It is **suggest-only and read-only**: it reads the serialized graph
+the collector already wrote, never mutates it, never runs a kernel, and needs no torch; speedups are
+analytical memory-bound upper bounds for ranking, not measured numbers.
+
+Underneath, the detector now estimates HBM traffic end-to-end. The FX collector captures each node's
+output shape and dtype (read from `node.meta['val']`) as typed `FxNode` fields, and the analyzer
+derives each matched pattern's GEMM dimensions (M/N/K0/K1/dtype) and runs the cost model — so a
+`FusionOpportunity` carries its baseline-vs-fused HBM byte traffic and estimated speedup, not just its
+location and suggested kernel. Shape capture is best-effort and additive: a graph written before this
+existed, or one with a dynamic (symbolic) shape, leaves the cost unset rather than guessing it
+(ADR-038).
 
 Tool 5 (`kernel-roofline`) complete: a roofline-pruned autotune filter for Triton kernels. A
 three-layer cost model — a Williams theoretical lower bound, an empirical predictor (four
