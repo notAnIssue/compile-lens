@@ -410,6 +410,25 @@ pub fn render(opportunities: &[FusionOpportunity], format: Format) -> String {
     }
 }
 
+/// Select the opportunities to report: drop those whose estimated speedup is below `min_speedup`
+/// (an opportunity with *no* estimate is kept — it can't be ranked, but it is still a real finding),
+/// rank by speedup descending, and keep the top `top_k`. This is the detector's report policy; the
+/// CLI just supplies the thresholds.
+pub fn select(
+    opportunities: Vec<FusionOpportunity>,
+    min_speedup: f64,
+    top_k: usize,
+) -> Vec<FusionOpportunity> {
+    let mut kept: Vec<FusionOpportunity> = opportunities
+        .into_iter()
+        // `map_or(true, …)` (not `is_none_or`, which is >MSRV): no estimate -> keep it.
+        .filter(|o| o.estimated_speedup.map_or(true, |s| s >= min_speedup))
+        .collect();
+    kept.sort_by(|a, b| cmp_speedup_desc(a, b).then_with(|| a.pattern_id.cmp(&b.pattern_id)));
+    kept.truncate(top_k);
+    kept
+}
+
 /// Speedup descending; an opportunity carrying an estimate ranks ahead of one that doesn't.
 fn cmp_speedup_desc(a: &FusionOpportunity, b: &FusionOpportunity) -> Ordering {
     match (a.estimated_speedup, b.estimated_speedup) {
@@ -985,5 +1004,47 @@ mod tests {
         opp.confidence = Some("medium".to_string());
         let md = render(&[opp], Format::Markdown);
         assert!(md.contains("Confidence: medium"));
+    }
+
+    fn with_speedup(s: Option<f64>) -> FusionOpportunity {
+        let mut o = canonical_opp();
+        o.estimated_speedup = s;
+        o
+    }
+
+    #[test]
+    fn select_drops_below_min_but_keeps_unestimated() {
+        // 1.1 < min(1.5) → dropped; 2.0 → kept; no estimate → kept (real finding, just unrankable).
+        let kept = select(
+            vec![
+                with_speedup(Some(1.1)),
+                with_speedup(Some(2.0)),
+                with_speedup(None),
+            ],
+            1.5,
+            10,
+        );
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].estimated_speedup, Some(2.0), "ranked first");
+        assert!(
+            kept.iter().any(|o| o.estimated_speedup.is_none()),
+            "unestimated kept"
+        );
+    }
+
+    #[test]
+    fn select_ranks_then_truncates_to_top_k() {
+        let kept = select(
+            vec![
+                with_speedup(Some(2.0)),
+                with_speedup(Some(3.0)),
+                with_speedup(Some(1.5)),
+            ],
+            1.0,
+            2,
+        );
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].estimated_speedup, Some(3.0));
+        assert_eq!(kept[1].estimated_speedup, Some(2.0));
     }
 }
