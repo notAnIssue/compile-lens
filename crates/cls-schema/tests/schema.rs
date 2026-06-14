@@ -87,6 +87,16 @@ fn test_full_example_deserialize() {
         Some("memory")
     );
 
+    // Tool 6 fusion opportunity (ADR-037): pattern + shape + suggested kernel survive deserialize.
+    let fusion = &artifact.fusion_opportunities[0];
+    assert_eq!(fusion.pattern_id, "A");
+    assert_eq!(fusion.confidence.as_deref(), Some("high"));
+    assert_eq!(fusion.shape.as_ref().expect("shape present").m, Some(8192));
+    assert_eq!(
+        fusion.suggested_kernel.as_deref(),
+        Some("fold per-row 1/rms into the second GEMM epilogue")
+    );
+
     // Tool 3 divergence finding, with its nested causal attribution (ADR-034).
     let divergence = &artifact.divergences[0];
     assert_eq!(
@@ -216,6 +226,45 @@ fn test_divergence_round_trips_and_skips_when_empty() {
     // artifact does not grow a spurious "divergences":[].
     let empty_json = serde_json::to_string(&parse(MINIMAL)).expect("serialize");
     assert!(!empty_json.contains("divergences"));
+}
+
+// ── test_fusion_opportunity_round_trips_and_skips_when_empty ─────────────────────────────
+#[test]
+fn test_fusion_opportunity_round_trips_and_skips_when_empty() {
+    use cls_schema::{FusionLocation, FusionOpportunity, FusionShape};
+
+    // An artifact without Tool 6 results omits the array entirely (skip_serializing_if), so a
+    // pre-Tool-6 artifact does not grow a spurious "fusion_opportunities":[] — and an old artifact
+    // read back simply defaults the field to empty (forward compatibility).
+    let empty_json = serde_json::to_string(&parse(MINIMAL)).expect("serialize");
+    assert!(!empty_json.contains("fusion_opportunities"));
+
+    // A full opportunity round-trips structurally; an absent optional (src_lineno_range) is not
+    // emitted.
+    let mut artifact = parse(MINIMAL);
+    artifact.fusion_opportunities.push(FusionOpportunity {
+        pattern_id: "A".into(),
+        location: Some(FusionLocation {
+            fx_node_ids: vec!["n_1".into(), "n_2".into()],
+            src_lineno_range: None,
+        }),
+        shape: Some(FusionShape {
+            m: Some(8192),
+            n: Some(11008),
+            k0: Some(4096),
+            k1: Some(4096),
+            dtype: Some("bf16".into()),
+        }),
+        baseline_hbm_bytes: Some(432_013_312.0),
+        fused_hbm_bytes: Some(300_941_312.0),
+        estimated_speedup: Some(1.43),
+        suggested_kernel: Some("fold per-row 1/rms into the second GEMM epilogue".into()),
+        confidence: Some("high".into()),
+    });
+    let json = serde_json::to_string(&artifact).expect("serialize");
+    let reparsed: ClsArtifact = serde_json::from_str(&json).expect("re-deserialize");
+    assert_eq!(artifact, reparsed);
+    assert!(!json.contains("src_lineno_range"));
 }
 
 // ── test_session_round_trip_serde ───────────────────────────────────────────────────────

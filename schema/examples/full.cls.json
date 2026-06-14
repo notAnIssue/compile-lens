@@ -208,5 +208,17 @@
         }
       ]
     }
+  ],
+  "fusion_opportunities": [
+    {
+      "pattern_id": "A",
+      "location": { "fx_node_ids": ["n_234", "n_235", "n_236", "n_241"], "src_lineno_range": "modeling_llama.py:412-447" },
+      "shape": { "m": 8192, "n": 11008, "k0": 4096, "k1": 4096, "dtype": "bf16" },
+      "baseline_hbm_bytes": 432013312,
+      "fused_hbm_bytes": 300941312,
+      "estimated_speedup": 1.43,
+      "suggested_kernel": "fold per-row 1/rms into the second GEMM epilogue",
+      "confidence": "high"
+    }
   ]
 }

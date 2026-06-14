@@ -21,7 +21,8 @@
     "lint_findings": { "type": "array", "items": { "$ref": "#/$defs/LintFinding" } },
     "divergences": { "type": "array", "items": { "$ref": "#/$defs/Divergence" } },
     "kernels": { "type": "array", "items": { "$ref": "#/$defs/Kernel" } },
-    "roofline_predictions": { "type": "array", "items": { "$ref": "#/$defs/RooflinePrediction" } }
+    "roofline_predictions": { "type": "array", "items": { "$ref": "#/$defs/RooflinePrediction" } },
+    "fusion_opportunities": { "type": "array", "items": { "$ref": "#/$defs/FusionOpportunity" }, "description": "Tool 6 algebraic fusion opportunities (ADR-037); an analysis result, optional and forward-compatible." }
   },
 
   "$defs": {
@@ -392,6 +393,39 @@
         "line_start": { "type": "integer", "minimum": 0 },
         "line_end": { "type": "integer", "minimum": 0 },
         "code_excerpt": { "type": "string", "description": "Opt-in only." }
+      }
+    },
+
+    "FusionOpportunity": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["pattern_id"],
+      "properties": {
+        "pattern_id": { "type": "string", "description": "Matched pattern, e.g. \"A\" (GEMM-Residual-RMSNorm-GEMM)." },
+        "location": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "fx_node_ids": { "type": "array", "items": { "type": "string" }, "description": "FX node ids forming the matched pattern." },
+            "src_lineno_range": { "type": "string", "description": "Source location (file:line-line) via Tool 1 localization, when available." }
+          }
+        },
+        "shape": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "m": { "type": "integer", "minimum": 0 },
+            "n": { "type": "integer", "minimum": 0 },
+            "k0": { "type": "integer", "minimum": 0 },
+            "k1": { "type": "integer", "minimum": 0 },
+            "dtype": { "type": "string" }
+          }
+        },
+        "baseline_hbm_bytes": { "type": "number", "minimum": 0 },
+        "fused_hbm_bytes": { "type": "number", "minimum": 0 },
+        "estimated_speedup": { "type": "number", "minimum": 0, "description": "baseline/fused under the memory-bound assumption; analytical only (N10)." },
+        "suggested_kernel": { "type": "string", "description": "a fused epilogue kernel kernel name; a string reference only, never imported or called." },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
       }
     }
   }
