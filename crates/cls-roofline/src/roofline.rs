@@ -112,6 +112,25 @@ impl RooflineCostModel {
             ..default_prediction(kernel_id)
         })
     }
+
+    /// Full single-kernel prediction: Layer 1 (the theoretical roofline) plus Layer 2 (the
+    /// empirical predictor's four corrections). On top of [`analyze`](Self::analyze)'s Layer-1
+    /// fields it fills `empirical_predictor_us` (the number Layer 3 ranks and prunes on) and the
+    /// `corrections_applied` list. `None` when Layer 1 can't draw the roofline (missing
+    /// flops/bytes).
+    pub fn predict(
+        &self,
+        kernel_id: &str,
+        features: &KernelFeatures,
+    ) -> Option<RooflinePrediction> {
+        let mut prediction = self.analyze(kernel_id, features)?;
+        // `analyze` returning `Some` guarantees the lower bound is set.
+        let lower_bound_us = prediction.theoretical_lower_bound_us?;
+        let empirical = self.empirical_predictor(lower_bound_us, features);
+        prediction.empirical_predictor_us = Some(empirical.predicted_us);
+        prediction.corrections_applied = empirical.corrections_applied;
+        Some(prediction)
+    }
 }
 
 /// A `RooflinePrediction` with only `kernel_id` set and every analysis field unset — the base the
@@ -234,5 +253,57 @@ mod tests {
             n_spills: None,
         };
         assert!(a100().analyze("k", &no_flops).is_none());
+    }
+
+    #[test]
+    fn predict_composes_layer1_and_layer2() {
+        // A small-block, register-heavy, spilling kernel: Layer 2 must inflate Layer 1's bound.
+        let features = KernelFeatures {
+            flops: Some(1.0e12),
+            bytes_loaded: Some(1.0e10),
+            bytes_stored: Some(0.0),
+            block_size: Some(64), // below saturation -> block_size penalty
+            num_regs: Some(128),  // heavy regs -> low occupancy -> occupancy penalty
+            n_spills: Some(16),   // spills -> register_pressure penalty
+        };
+        let pred = a100()
+            .predict("k0", &features)
+            .expect("flops + bytes present");
+        // Layer 1 fields are present...
+        let lb = pred
+            .theoretical_lower_bound_us
+            .expect("layer 1 lower bound");
+        assert!(pred.arithmetic_intensity.is_some());
+        // ...and Layer 2 filled the empirical predictor strictly above the lower bound.
+        let emp = pred
+            .empirical_predictor_us
+            .expect("layer 2 empirical predictor");
+        assert!(emp > lb, "empirical {emp} must exceed lower bound {lb}");
+        // All three feature-driven corrections fired, plus the always-on launch overhead.
+        for correction in [
+            "block_size",
+            "occupancy",
+            "launch_overhead",
+            "register_pressure",
+        ] {
+            assert!(
+                pred.corrections_applied.iter().any(|c| c == correction),
+                "expected correction {correction} in {:?}",
+                pred.corrections_applied
+            );
+        }
+    }
+
+    #[test]
+    fn predict_is_none_without_the_roofline_inputs() {
+        let no_bytes = KernelFeatures {
+            flops: Some(1.0e12),
+            bytes_loaded: None,
+            bytes_stored: None,
+            block_size: None,
+            num_regs: None,
+            n_spills: None,
+        };
+        assert!(a100().predict("k", &no_bytes).is_none());
     }
 }

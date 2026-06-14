@@ -1,0 +1,39 @@
+{
+  "schema_version": "0.5.0",
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000000",
+    "timestamp": "2026-01-01T00:00:00Z",
+    "torch_version": "2.6.0",
+    "redaction_policy": "default-strict"
+  },
+  "kernels": [
+    {
+      "kernel_id": "cfg_bs256_r32",
+      "name": "triton_fused_matmul",
+      "launch_config": { "grid": [128, 1, 1], "block": [256, 1, 1], "num_warps": 8, "num_stages": 3 },
+      "features": { "flops": 12000000000, "bytes_loaded": 840000000, "bytes_stored": 420000000, "block_size": 256, "num_regs": 32, "n_spills": 0 },
+      "measurements": { "iterations": 50, "mean_us": 650.0, "source": "proton" }
+    },
+    {
+      "kernel_id": "cfg_bs64_r32",
+      "name": "triton_fused_matmul",
+      "launch_config": { "grid": [128, 1, 1], "block": [64, 1, 1], "num_warps": 2, "num_stages": 3 },
+      "features": { "flops": 12000000000, "bytes_loaded": 840000000, "bytes_stored": 420000000, "block_size": 64, "num_regs": 32, "n_spills": 0 },
+      "measurements": { "iterations": 50, "mean_us": 820.0, "source": "proton" }
+    },
+    {
+      "kernel_id": "cfg_bs32_r32",
+      "name": "triton_fused_matmul",
+      "launch_config": { "grid": [128, 1, 1], "block": [32, 1, 1], "num_warps": 1, "num_stages": 3 },
+      "features": { "flops": 12000000000, "bytes_loaded": 840000000, "bytes_stored": 420000000, "block_size": 32, "num_regs": 32, "n_spills": 0 },
+      "measurements": { "iterations": 50, "mean_us": 900.0, "source": "proton" }
+    },
+    {
+      "kernel_id": "cfg_bs256_r64",
+      "name": "triton_fused_matmul",
+      "launch_config": { "grid": [128, 1, 1], "block": [256, 1, 1], "num_warps": 8, "num_stages": 3 },
+      "features": { "flops": 12000000000, "bytes_loaded": 840000000, "bytes_stored": 420000000, "block_size": 256, "num_regs": 64, "n_spills": 0 },
+      "measurements": { "iterations": 50, "mean_us": 1300.0, "source": "proton" }
+    }
+  ]
+}

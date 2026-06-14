@@ -159,6 +159,36 @@ enum Command {
         min_severity: Option<String>,
     },
 
+    /// Kernel roofline triage (Tool 5). For each kernel in a session, compute the theoretical
+    /// lower bound (Layer 1) and the empirical predictor (Layer 2) against a GPU spec; when the
+    /// kernels carry measured runtimes, calibrate the predicted ranking against the measured one
+    /// (Spearman) and report a grid-level pruning decision (Layer 3 — how many configs an
+    /// autotuner must actually measure). The autotune harness drives this via `--format json`.
+    KernelRoofline {
+        /// The collected `.cls.json` session whose `kernels[]` to analyze.
+        session: std::path::PathBuf,
+
+        /// GPU spec to compute the roofline against (registry name, case-insensitive).
+        #[arg(long, default_value = "A100-SXM-80GB")]
+        gpu: String,
+
+        /// Restrict the rendered report to kernels whose id contains this substring.
+        #[arg(long, value_name = "SUBSTR")]
+        kernel: Option<String>,
+
+        /// List the session's kernel ids and names, then exit without analyzing.
+        #[arg(long)]
+        list: bool,
+
+        /// Target number of configs to keep under aggressive pruning (Layer 3).
+        #[arg(long, default_value_t = 5)]
+        top_k: usize,
+
+        /// Output format: `markdown` (default) or `json`.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -299,6 +329,15 @@ fn run(cli: Cli) -> Result<(), ClsError> {
             min_severity,
         }) => compile_lint(session, db, format, min_severity),
 
+        Some(Command::KernelRoofline {
+            session,
+            gpu,
+            kernel,
+            list,
+            top_k,
+            format,
+        }) => kernel_roofline(session, gpu, kernel, list, top_k, format),
+
         Some(Command::Migrate {
             input,
             output,
@@ -412,6 +451,40 @@ fn cache_stability(session: std::path::PathBuf, format: SummaryFormat) -> Result
         "{}",
         cls_analyzer::cache_stability::render(&findings, render_format)
     );
+    Ok(())
+}
+
+/// `cl kernel-roofline` — Tool 5. Load a session, compute each kernel's roofline prediction
+/// (Layer 1 + Layer 2) against `--gpu`, and — when measurements are present — a grid-level
+/// calibration plus pruning decision (Layer 3). `--list` short-circuits to a kernel listing;
+/// `--kernel` narrows the rendered report to matching ids. The JSON shape is what the autotune
+/// harness consumes across the subprocess boundary (ADR-006).
+fn kernel_roofline(
+    session: std::path::PathBuf,
+    gpu: String,
+    kernel: Option<String>,
+    list: bool,
+    top_k: usize,
+    format: SummaryFormat,
+) -> Result<(), ClsError> {
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+
+    if list {
+        for k in &artifact.kernels {
+            println!("{}\t{}", k.kernel_id, k.name);
+        }
+        return Ok(());
+    }
+
+    let mut report = cls_analyzer::roofline::analyze(&artifact, &gpu, top_k)?;
+    if let Some(substr) = &kernel {
+        report.predictions.retain(|p| p.kernel_id.contains(substr));
+    }
+    let render_format = match format {
+        SummaryFormat::Json => cls_analyzer::roofline::Format::Json,
+        SummaryFormat::Markdown | SummaryFormat::Text => cls_analyzer::roofline::Format::Markdown,
+    };
+    print!("{}", cls_analyzer::roofline::render(&report, render_format));
     Ok(())
 }
 
