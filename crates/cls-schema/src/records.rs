@@ -258,3 +258,57 @@ pub struct DivergenceAttribution {
     /// How many recompile-and-recheck probes the experiment ran (cost transparency).
     pub num_probes: u64,
 }
+
+/// Tool 6 algebraic fusion opportunity (`fusion_opportunities[]`). An analysis result: a matched
+/// `GEMM-Residual-RMSNorm-GEMM`-style pattern with its analytical HBM-traffic estimate and a
+/// suggested epilogue kernel. Suggest-only — compile-lens never imports or calls the kernel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FusionOpportunity {
+    /// Matched pattern, e.g. `"A"` (GEMM-Residual-RMSNorm-GEMM).
+    pub pattern_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<FusionLocation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<FusionShape>,
+    /// Standard-path HBM traffic in bytes (analytical roofline estimate, not measured).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_hbm_bytes: Option<f64>,
+    /// CODA-fused HBM traffic in bytes (analytical roofline estimate).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fused_hbm_bytes: Option<f64>,
+    /// `baseline / fused` under the memory-bound assumption; analytical only (N10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_speedup: Option<f64>,
+    /// Suggested `epilogue_kit.ops.*` kernel name — a string reference only (the seam).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested_kernel: Option<String>,
+    /// `high` / `medium` / `low`. Kept `String` for forward-compat (same as the lint vocabularies).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<String>,
+}
+
+/// Where a fusion opportunity lives, in the graph and (when localizable) the source.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FusionLocation {
+    /// The FX node ids forming the matched pattern.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fx_node_ids: Vec<String>,
+    /// Source location (`file:line-line`) via Tool 1 localization, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src_lineno_range: Option<String>,
+}
+
+/// The GEMM shapes a fusion opportunity spans; the cost model reads these.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FusionShape {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub m: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k0: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k1: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dtype: Option<String>,
+}
