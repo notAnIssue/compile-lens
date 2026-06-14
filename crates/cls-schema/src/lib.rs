@@ -42,9 +42,9 @@ pub use kernels::{
     PruningDecision, RooflinePrediction, Suggestion,
 };
 pub use records::{
-    CompilePhase, CompiledGraph, Divergence, DivergenceAttribution, FailedGuard, FxNode,
-    GraphBreak, GuardEvaluation, InternalStateSnapshot, Iteration, LintFinding, Recompilation,
-    ReferenceIssue, SourceLocation, SourceRange,
+    CompilePhase, CompiledGraph, Divergence, DivergenceAttribution, FailedGuard, FusionLocation,
+    FusionOpportunity, FusionShape, FxNode, GraphBreak, GuardEvaluation, InternalStateSnapshot,
+    Iteration, LintFinding, Recompilation, ReferenceIssue, SourceLocation, SourceRange,
 };
 pub use session::{CompileConfig, EnvSnapshot, RedactionPolicy, Session};
 
@@ -92,6 +92,9 @@ pub struct ClsArtifact {
     pub kernels: Vec<Kernel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roofline_predictions: Vec<RooflinePrediction>,
+    /// Tool 6 algebraic fusion opportunities (ADR-037). An analysis result, like its peers above.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fusion_opportunities: Vec<FusionOpportunity>,
 
     /// Forward-compatible capture of unknown top-level keys (D6 / `additionalProperties`).
     #[serde(flatten)]
@@ -114,6 +117,7 @@ impl ClsArtifact {
             divergences: Vec::new(),
             kernels: Vec::new(),
             roofline_predictions: Vec::new(),
+            fusion_opportunities: Vec::new(),
             extra: JsonMap::new(),
         }
     }

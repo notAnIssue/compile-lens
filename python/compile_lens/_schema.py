@@ -325,6 +325,33 @@ class Session(_Model):
     env_snapshot: EnvSnapshot | None = None
 
 
+class FusionShape(_Model):
+    m: int | None = None
+    n: int | None = None
+    k0: int | None = None
+    k1: int | None = None
+    dtype: str | None = None
+
+
+class FusionLocation(_Model):
+    fx_node_ids: list[str] = Field(default_factory=list)
+    src_lineno_range: str | None = None
+
+
+class FusionOpportunity(_Model):
+    """Tool 6 algebraic fusion opportunity (``fusion_opportunities[]``). Suggest-only — the
+    ``suggested_kernel`` is a string reference compile-lens never imports or calls."""
+
+    pattern_id: str
+    location: FusionLocation | None = None
+    shape: FusionShape | None = None
+    baseline_hbm_bytes: float | None = None
+    fused_hbm_bytes: float | None = None
+    estimated_speedup: float | None = None
+    suggested_kernel: str | None = None
+    confidence: str | None = None  # "high" / "medium" / "low" (plain str, forward-compat)
+
+
 class ClsArtifact(_Model):
     """Top-level ``.cls.json`` artifact. Growth point: ``extra="allow"`` preserves unknown
     top-level keys (e.g. a future record array), mirroring the Rust ``ClsArtifact.extra``."""
@@ -342,6 +369,7 @@ class ClsArtifact(_Model):
     divergences: list[Divergence] = Field(default_factory=list)
     kernels: list[Kernel] = Field(default_factory=list)
     roofline_predictions: list[RooflinePrediction] = Field(default_factory=list)
+    fusion_opportunities: list[FusionOpportunity] = Field(default_factory=list)
 
 
 def from_json(data: str | bytes) -> ClsArtifact:

@@ -17,16 +17,7 @@
 //! `wl-diff` — no live Python graph, no re-trace. **This module is the scaffold**; the Pattern A
 //! matcher, the cost model, and the renderer land in the following changes.
 
-use cls_schema::ClsArtifact;
-
-/// A detected fusion opportunity. Placeholder shape for the scaffold — the full record (pattern id,
-/// FX node range, tensor shape, baseline/fused HBM bytes, estimated speedup, suggested kernel,
-/// confidence) lands with the `fusion_opportunities` schema field in the next change.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FusionOpportunity {
-    /// The matched pattern, e.g. `"A"` (GEMM-Residual-RMSNorm-GEMM).
-    pub pattern_id: String,
-}
+use cls_schema::{ClsArtifact, FusionOpportunity};
 
 /// Scan a session's serialized FX graph for fusion opportunities.
 ///
