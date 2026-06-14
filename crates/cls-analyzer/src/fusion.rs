@@ -20,7 +20,8 @@
 //! `inputs` are the ids it consumes, so a node is *single-consumer* iff its id appears in exactly
 //! one other node's `inputs` (one reverse scan).
 
-use cls_schema::{ClsArtifact, FusionLocation, FusionOpportunity, FxNode};
+use cls_schema::{ClsArtifact, FusionLocation, FusionOpportunity, FusionShape, FxNode};
+use std::collections::HashMap;
 
 // ── torch-concrete op predicates (N9/N12) ──────────────────────────────────────────────────
 /// True when `op` is `base` or an overload of it (`base.Tensor`, `base.default`, …) — but **not**
@@ -201,25 +202,61 @@ fn match_decomposed_rms_norm(nodes: &[FxNode], add_consumers: &[&FxNode]) -> Opt
 }
 
 /// Scan a session's compiled graphs for Pattern A fusion opportunities. Fills the pattern, the FX
-/// node range, the suggested kernel, and the confidence; the shape and HBM-traffic estimate are
-/// filled by the cost model in a later change.
+/// node range, the suggested kernel, and the confidence; and — when the collector captured concrete
+/// shapes (ADR-038) — the GEMM shape and the analytical HBM-traffic estimate via the cost model.
+///
+/// The cost is best-effort, not required: an opportunity whose shapes weren't captured (meta absent
+/// or a dynamic/symbolic shape) is still reported, just with `shape`/bytes/`estimated_speedup` left
+/// `None` — the structural finding stands on its own, and the cost stays unknown rather than guessed
+/// (N10).
 pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
     let mut out = Vec::new();
     for graph in &artifact.compiled_graphs {
+        let by_id: HashMap<&str, &FxNode> = graph
+            .nodes
+            .iter()
+            .map(|node| (node.id.as_str(), node))
+            .collect();
         for m in find_pattern_a(&graph.nodes) {
+            // Derive shapes (and cost) *before* moving the match's ids into the location below.
+            let cost = derive_shape(&by_id, &m).map(|(shape, dtype)| {
+                let db = dtype_bytes(&dtype);
+                let baseline = baseline_hbm_bytes(&shape, db);
+                let fused = coda_hbm_bytes(&shape, db, DEFAULT_TILE_N);
+                let speedup = estimated_speedup(baseline, fused);
+                (shape, dtype, baseline, fused, speedup)
+            });
+
             let mut fx_node_ids = vec![m.gemm1, m.add];
             fx_node_ids.extend(m.rms_norm_ids);
             fx_node_ids.push(m.gemm2);
+
+            let (shape, baseline_hbm_bytes, fused_hbm_bytes, estimated_speedup) = match cost {
+                Some((s, dtype, baseline, fused, speedup)) => (
+                    Some(FusionShape {
+                        m: Some(s.m),
+                        n: Some(s.n),
+                        k0: Some(s.k0),
+                        k1: Some(s.k1),
+                        dtype: Some(dtype),
+                    }),
+                    Some(baseline as f64),
+                    Some(fused as f64),
+                    Some(speedup),
+                ),
+                None => (None, None, None, None),
+            };
+
             out.push(FusionOpportunity {
                 pattern_id: "A".to_string(),
                 location: Some(FusionLocation {
                     fx_node_ids,
                     src_lineno_range: None,
                 }),
-                shape: None,
-                baseline_hbm_bytes: None,
-                fused_hbm_bytes: None,
-                estimated_speedup: None,
+                shape,
+                baseline_hbm_bytes,
+                fused_hbm_bytes,
+                estimated_speedup,
                 suggested_kernel: Some("epilogue_kit.ops.fused_residual_rms_pattern".to_string()),
                 // Native exact match is high-confidence; a decomposed subgraph match is medium.
                 confidence: Some(if m.decomposed { "medium" } else { "high" }.to_string()),
@@ -227,6 +264,42 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
         }
     }
     out
+}
+
+/// Derive the GEMM dimensions (and dtype) a Pattern A match spans, from the captured node output
+/// shapes. `None` whenever a needed shape wasn't captured — the caller then leaves the cost unset.
+///
+/// Reading the dims off the two matched GEMMs and GEMM1's activation input:
+/// GEMM1 output is `[…, M, N]`, GEMM2 output is `[…, M, K1]`, and `K0` is GEMM1's contraction dim —
+/// the trailing dim of its `[…, M, K0]` activation operand, found as the input whose leading-dim
+/// product equals `M` (the weight `[K0, N]` and the `[N]` bias don't match, so the activation is
+/// picked unambiguously). The dtype is taken from GEMM1's output.
+fn derive_shape(by_id: &HashMap<&str, &FxNode>, m: &PatternAMatch) -> Option<(Shape, String)> {
+    let g1 = by_id.get(m.gemm1.as_str())?;
+    let g2 = by_id.get(m.gemm2.as_str())?;
+    let (rows, n) = rows_cols(&g1.out_shape)?;
+    let (_g2_rows, k1) = rows_cols(&g2.out_shape)?;
+    let k0 = g1
+        .inputs
+        .iter()
+        .filter_map(|id| by_id.get(id.as_str()))
+        .find_map(|inp| {
+            rows_cols(&inp.out_shape)
+                .filter(|&(r, _)| r == rows)
+                .map(|(_, c)| c)
+        })?;
+    let dtype = g1.out_dtype.clone()?;
+    Some((Shape { m: rows, n, k0, k1 }, dtype))
+}
+
+/// `(product of leading dims, last dim)` for a rank-≥2 shape — the GEMM's row count (batch dims
+/// folded into `M`) and its column count. `None` for a 0-D/1-D shape (not a GEMM output).
+fn rows_cols(shape: &[u64]) -> Option<(u64, u64)> {
+    if shape.len() < 2 {
+        return None;
+    }
+    let (&cols, leading) = shape.split_last().unwrap();
+    Some((leading.iter().product(), cols))
 }
 
 // ── analytical HBM-traffic cost model (N10) ─────────────────────────────────────────────────
@@ -250,12 +323,15 @@ pub struct Shape {
 /// Default autotune tile width along N for the partial-statistics accounting (CODA uses 128).
 pub const DEFAULT_TILE_N: u64 = 128;
 
-/// Bytes per element for a dtype name. Inference activations default to 2 (bf16 / fp16).
+/// Bytes per element for a dtype name. Accepts both the short forms (`bf16`, `fp32`) and the torch
+/// names the collector emits (`bfloat16`, `float32`, `float8_e4m3fn`). Inference activations default
+/// to 2 (bf16 / fp16).
 pub fn dtype_bytes(dtype: &str) -> u64 {
     match dtype {
         "fp64" | "float64" => 8,
         "fp32" | "float32" => 4,
-        "fp8" | "float8" | "e4m3" | "e5m2" => 1,
+        "fp16" | "float16" | "bf16" | "bfloat16" => 2,
+        d if d.starts_with("float8") || d.starts_with("fp8") || d == "e4m3" || d == "e5m2" => 1,
         _ => 2,
     }
 }
@@ -305,6 +381,8 @@ mod tests {
             op_type: op.to_string(),
             inputs: inputs.iter().map(|s| (*s).to_string()).collect(),
             attrs: Default::default(),
+            out_shape: Vec::new(),
+            out_dtype: None,
         }
     }
 
@@ -475,6 +553,134 @@ mod tests {
         );
         let ids = &found[0].location.as_ref().unwrap().fx_node_ids;
         assert_eq!(ids, &vec!["g1", "add", "rms", "g2"]);
+        // No shapes captured -> the structural finding stands, but the cost stays unset (N10).
+        assert!(found[0].shape.is_none(), "no shapes -> no shape record");
+        assert!(found[0].baseline_hbm_bytes.is_none());
+        assert!(found[0].estimated_speedup.is_none());
+    }
+
+    #[test]
+    fn analyze_fills_cost_when_shapes_are_captured() {
+        // The same canonical LLaMA shape as `cost_model_on_the_canonical_llama_shape` (M=8192,
+        // N=11008, K0=4096, K1=4096, bf16), now driven end-to-end from captured node out_shapes —
+        // so the matcher, shape derivation, and cost model agree on the worked-example numbers.
+        let json = r#"{
+            "schema_version":"0.5.0",
+            "session":{"id":"00000000-0000-4000-8000-000000000000","timestamp":"t",
+                       "torch_version":"2.6.0","redaction_policy":"default-strict"},
+            "compiled_graphs":[{"graph_id":"g","nodes":[
+                {"id":"x","op_type":"placeholder","out_shape":[8192,4096],"out_dtype":"bfloat16"},
+                {"id":"w0","op_type":"placeholder","out_shape":[4096,11008],"out_dtype":"bfloat16"},
+                {"id":"bias","op_type":"placeholder","out_shape":[11008],"out_dtype":"bfloat16"},
+                {"id":"resid","op_type":"placeholder","out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"gamma","op_type":"placeholder","out_shape":[11008],"out_dtype":"bfloat16"},
+                {"id":"w1","op_type":"placeholder","out_shape":[11008,4096],"out_dtype":"bfloat16"},
+                {"id":"g1","op_type":"aten.addmm","inputs":["bias","x","w0"],"out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"add","op_type":"aten.add","inputs":["g1","resid"],"out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"rms","op_type":"aten.rms_norm","inputs":["add","gamma"],"out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"g2","op_type":"aten.mm","inputs":["rms","w1"],"out_shape":[8192,4096],"out_dtype":"bfloat16"}
+            ]}]
+        }"#;
+        let artifact: ClsArtifact = serde_json::from_str(json).expect("artifact parses");
+        let found = analyze(&artifact);
+        assert_eq!(found.len(), 1);
+
+        let shape = found[0]
+            .shape
+            .as_ref()
+            .expect("shape derived from captured out_shapes");
+        assert_eq!(shape.m, Some(8192));
+        assert_eq!(shape.n, Some(11008));
+        assert_eq!(shape.k0, Some(4096));
+        assert_eq!(shape.k1, Some(4096));
+        assert_eq!(shape.dtype.as_deref(), Some("bfloat16"));
+
+        assert_eq!(found[0].baseline_hbm_bytes, Some(1_757_413_376.0));
+        assert_eq!(found[0].fused_hbm_bytes, Some(861_339_648.0));
+        let speedup = found[0].estimated_speedup.expect("speedup filled");
+        assert!(
+            (speedup - 2.04).abs() < 0.01,
+            "memory-bound ~2.04x, got {speedup}"
+        );
+    }
+
+    #[test]
+    fn analyze_leaves_cost_unset_on_partial_shapes() {
+        // GEMM2's shape is missing -> K1 (and the whole cost) can't be derived; the opportunity is
+        // still reported, just without a cost (graceful, not an error).
+        let json = r#"{
+            "schema_version":"0.5.0",
+            "session":{"id":"00000000-0000-4000-8000-000000000000","timestamp":"t",
+                       "torch_version":"2.6.0","redaction_policy":"default-strict"},
+            "compiled_graphs":[{"graph_id":"g","nodes":[
+                {"id":"x","op_type":"placeholder","out_shape":[8192,4096],"out_dtype":"bfloat16"},
+                {"id":"w0","op_type":"placeholder","out_shape":[4096,11008],"out_dtype":"bfloat16"},
+                {"id":"g1","op_type":"aten.mm","inputs":["x","w0"],"out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"add","op_type":"aten.add","inputs":["g1","resid"],"out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"rms","op_type":"aten.rms_norm","inputs":["add","gamma"],"out_shape":[8192,11008],"out_dtype":"bfloat16"},
+                {"id":"g2","op_type":"aten.mm","inputs":["rms","w1"]}
+            ]}]
+        }"#;
+        let artifact: ClsArtifact = serde_json::from_str(json).expect("artifact parses");
+        let found = analyze(&artifact);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].shape.is_none(), "GEMM2 shape missing -> no cost");
+        assert!(found[0].estimated_speedup.is_none());
+    }
+
+    #[test]
+    fn analyze_on_a_real_captured_decomposed_graph() {
+        // The exact aten graph a real `torch.compile` capture of `Linear -> +resid -> RMSNorm ->
+        // Linear` produces (verified against torch 2.12 CPU): `nn.RMSNorm` lowers to the *decomposed*
+        // pow/mean/eps/rsqrt/mul/mul subgraph (not a native `aten.rms_norm`), ops carry overload
+        // suffixes (`.Tensor_Scalar`, `.dim`, `.Scalar`), and the Linear weights appear as `aten.t`
+        // transposes feeding the GEMMs. This pins that the matcher + shape derivation + cost all fire
+        // end-to-end on a real graph, through the decomposed branch.
+        let json = r#"{
+            "schema_version":"0.5.0",
+            "session":{"id":"00000000-0000-4000-8000-000000000000","timestamp":"t",
+                       "torch_version":"2.12.0","redaction_policy":"default-strict"},
+            "compiled_graphs":[{"graph_id":"g","nodes":[
+                {"id":"arg1_1","op_type":"placeholder","out_shape":[128],"out_dtype":"float32"},
+                {"id":"arg2_1","op_type":"placeholder","out_shape":[32,64],"out_dtype":"float32"},
+                {"id":"arg3_1","op_type":"placeholder","out_shape":[32,128],"out_dtype":"float32"},
+                {"id":"arg4_1","op_type":"placeholder","out_shape":[128],"out_dtype":"float32"},
+                {"id":"t","op_type":"aten.t.default","inputs":["arg0_1"],"out_shape":[64,128],"out_dtype":"float32"},
+                {"id":"addmm","op_type":"aten.addmm.default","inputs":["arg1_1","arg2_1","t"],"out_shape":[32,128],"out_dtype":"float32"},
+                {"id":"add","op_type":"aten.add.Tensor","inputs":["addmm","arg3_1"],"out_shape":[32,128],"out_dtype":"float32"},
+                {"id":"pow_1","op_type":"aten.pow.Tensor_Scalar","inputs":["add"],"out_shape":[32,128],"out_dtype":"float32"},
+                {"id":"mean","op_type":"aten.mean.dim","inputs":["pow_1"],"out_shape":[32,1],"out_dtype":"float32"},
+                {"id":"add_1","op_type":"aten.add.Scalar","inputs":["mean"],"out_shape":[32,1],"out_dtype":"float32"},
+                {"id":"rsqrt","op_type":"aten.rsqrt.default","inputs":["add_1"],"out_shape":[32,1],"out_dtype":"float32"},
+                {"id":"mul","op_type":"aten.mul.Tensor","inputs":["add","rsqrt"],"out_shape":[32,128],"out_dtype":"float32"},
+                {"id":"mul_1","op_type":"aten.mul.Tensor","inputs":["mul","arg4_1"],"out_shape":[32,128],"out_dtype":"float32"},
+                {"id":"t_1","op_type":"aten.t.default","inputs":["arg5_1"],"out_shape":[128,64],"out_dtype":"float32"},
+                {"id":"mm","op_type":"aten.mm.default","inputs":["mul_1","t_1"],"out_shape":[32,64],"out_dtype":"float32"},
+                {"id":"output","op_type":"output","inputs":["mm"]}
+            ]}]
+        }"#;
+        let artifact: ClsArtifact = serde_json::from_str(json).expect("artifact parses");
+        let found = analyze(&artifact);
+        assert_eq!(found.len(), 1, "one decomposed Pattern A in the real graph");
+        assert_eq!(
+            found[0].confidence.as_deref(),
+            Some("medium"),
+            "decomposed -> medium"
+        );
+
+        let shape = found[0]
+            .shape
+            .as_ref()
+            .expect("shape derived from the real capture");
+        assert_eq!(shape.m, Some(32));
+        assert_eq!(shape.n, Some(128));
+        assert_eq!(shape.k0, Some(64)); // contraction dim of the first GEMM, off its [M,K0] input
+        assert_eq!(shape.k1, Some(64));
+        assert_eq!(shape.dtype.as_deref(), Some("float32"));
+        assert!(
+            found[0].estimated_speedup.unwrap() > 1.0,
+            "fusion saves traffic"
+        );
     }
 
     #[test]

@@ -124,6 +124,13 @@ class FxNode(_Model):
     #: Node attributes (a constant's value, a dim parameter, …); a difference here makes the
     #: diff classify an otherwise-identical node as ``modified``.
     attrs: dict[str, Any] = Field(default_factory=dict)
+    #: Output tensor shape, when a concrete one was captured from ``node.meta['val']``. Empty when
+    #: unknown (meta absent, value not a single tensor, or a dynamic/symbolic shape). Tool 6's cost
+    #: model reads these to size HBM traffic; structure-only consumers ignore them (ADR-038).
+    out_shape: list[int] = Field(default_factory=list)
+    #: Output dtype as a torch name without the ``torch.`` prefix (``bfloat16``); absent under the
+    #: same conditions as ``out_shape``.
+    out_dtype: str | None = None
 
 
 class CompiledGraph(_Model):

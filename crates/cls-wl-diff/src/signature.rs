@@ -257,6 +257,8 @@ mod tests {
             op_type: op_type.to_string(),
             inputs: inputs.iter().map(|s| s.to_string()).collect(),
             attrs: Default::default(),
+            out_shape: Vec::new(),
+            out_dtype: None,
         }
     }
 
