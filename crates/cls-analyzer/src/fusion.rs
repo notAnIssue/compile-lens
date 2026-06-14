@@ -21,6 +21,7 @@
 //! one other node's `inputs` (one reverse scan).
 
 use cls_schema::{ClsArtifact, FusionLocation, FusionOpportunity, FusionShape, FxNode};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 // ── torch-concrete op predicates (N9/N12) ──────────────────────────────────────────────────
@@ -369,6 +370,137 @@ pub fn estimated_speedup(baseline_bytes: u64, coda_bytes: u64) -> f64 {
         return 0.0;
     }
     baseline_bytes as f64 / coda_bytes as f64
+}
+
+// ── report rendering ──────────────────────────────────────────────────────────────────────────
+//
+// Renders the detector's opportunities, highest estimated speedup first. `Json` is schema-aligned
+// (`{ "fusion_opportunities": [...] }` — the artifact's own field, so the report round-trips back
+// into the schema type); `Markdown` follows the worked example in the design note. An opportunity
+// whose shapes weren't captured still renders — with its location, confidence, and suggested kernel
+// — but with an honest "not estimated" line instead of a fabricated cost.
+
+/// Output format for the fusion report (mirrors the other tools' two shapes).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+    Markdown,
+    Json,
+}
+
+/// A serialize-only view of the report under the schema's `fusion_opportunities` key, borrowing the
+/// opportunities so rendering never clones the artifact's records.
+#[derive(serde::Serialize)]
+struct FusionReport<'a> {
+    fusion_opportunities: Vec<&'a FusionOpportunity>,
+}
+
+/// Render fusion opportunities, ranked by estimated speedup (descending; opportunities with no
+/// estimate sort last, then by `pattern_id` for a stable order).
+pub fn render(opportunities: &[FusionOpportunity], format: Format) -> String {
+    let mut ranked: Vec<&FusionOpportunity> = opportunities.iter().collect();
+    ranked.sort_by(|a, b| cmp_speedup_desc(a, b).then_with(|| a.pattern_id.cmp(&b.pattern_id)));
+    match format {
+        Format::Json => {
+            let report = FusionReport {
+                fusion_opportunities: ranked,
+            };
+            serde_json::to_string_pretty(&report).expect("FusionReport serializes")
+        }
+        Format::Markdown => render_markdown(&ranked),
+    }
+}
+
+/// Speedup descending; an opportunity carrying an estimate ranks ahead of one that doesn't.
+fn cmp_speedup_desc(a: &FusionOpportunity, b: &FusionOpportunity) -> Ordering {
+    match (a.estimated_speedup, b.estimated_speedup) {
+        (Some(x), Some(y)) => y.partial_cmp(&x).unwrap_or(Ordering::Equal),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+/// The human-readable name for a matched pattern id.
+fn pattern_name(pattern_id: &str) -> &str {
+    match pattern_id {
+        "A" => "GEMM-Residual-RMSNorm-GEMM",
+        _ => "fusion pattern",
+    }
+}
+
+/// Bytes as whole megabytes (MB = 10⁶ B, matching the design note's worked example).
+fn mb(bytes: f64) -> u64 {
+    (bytes / 1_000_000.0).round() as u64
+}
+
+fn render_markdown(ranked: &[&FusionOpportunity]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(out, "## Fusion Opportunities Detected");
+
+    if ranked.is_empty() {
+        let _ = writeln!(out, "\nNo fusion opportunities detected.");
+        return out;
+    }
+
+    for (i, opp) in ranked.iter().enumerate() {
+        let name = pattern_name(&opp.pattern_id);
+        let _ = writeln!(out, "\n### #{}: {name}", i + 1);
+        let _ = writeln!(out, "- Pattern: {} ({name})", opp.pattern_id);
+
+        if let Some(loc) = &opp.location {
+            let nodes = loc.fx_node_ids.join(", ");
+            match &loc.src_lineno_range {
+                Some(src) => {
+                    let _ = writeln!(out, "- Location: FX nodes {nodes}, src: {src}");
+                }
+                None => {
+                    let _ = writeln!(out, "- Location: FX nodes {nodes}");
+                }
+            }
+        }
+
+        if let Some(shape) = &opp.shape {
+            if let (Some(m), Some(n), Some(k0), Some(k1)) = (shape.m, shape.n, shape.k0, shape.k1) {
+                let dtype = shape.dtype.as_deref().unwrap_or("?");
+                let _ = writeln!(
+                    out,
+                    "- Shape: M={m}, K0={k0}, N={n}, K1={k1}, dtype={dtype}"
+                );
+            }
+        }
+
+        match (
+            opp.baseline_hbm_bytes,
+            opp.fused_hbm_bytes,
+            opp.estimated_speedup,
+        ) {
+            (Some(baseline), Some(fused), Some(speedup)) => {
+                let _ = writeln!(out, "- Baseline HBM traffic: {} MB", mb(baseline));
+                let _ = writeln!(out, "- CODA-fused HBM traffic: {} MB", mb(fused));
+                let _ = writeln!(
+                    out,
+                    "- Estimated speedup: ~{speedup:.2}× (memory-bound upper bound — ranks \
+                     opportunities, not a promise; real is lower, ~1.05–1.15× per the paper, \
+                     GEMMs being compute-bound)"
+                );
+            }
+            _ => {
+                let _ = writeln!(
+                    out,
+                    "- HBM traffic: not estimated (tensor shapes unavailable for this graph)"
+                );
+            }
+        }
+
+        if let Some(kernel) = &opp.suggested_kernel {
+            let _ = writeln!(out, "- Suggested kernel: {kernel}");
+        }
+        if let Some(confidence) = &opp.confidence {
+            let _ = writeln!(out, "- Confidence: {confidence}");
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -734,5 +866,124 @@ mod tests {
         assert!(estimated_speedup(baseline, coda) > 1.0);
         // Degenerate guard: never divide by zero.
         assert_eq!(estimated_speedup(100, 0), 0.0);
+    }
+
+    // ── report rendering ────────────────────────────────────────────────────────────────────
+
+    /// The canonical worked-example opportunity (matches `cost_model_on_the_canonical_llama_shape`).
+    fn canonical_opp() -> FusionOpportunity {
+        FusionOpportunity {
+            pattern_id: "A".to_string(),
+            location: Some(FusionLocation {
+                fx_node_ids: vec![
+                    "g1".to_string(),
+                    "add".to_string(),
+                    "rms".to_string(),
+                    "g2".to_string(),
+                ],
+                src_lineno_range: None,
+            }),
+            shape: Some(FusionShape {
+                m: Some(8192),
+                n: Some(11008),
+                k0: Some(4096),
+                k1: Some(4096),
+                dtype: Some("bf16".to_string()),
+            }),
+            baseline_hbm_bytes: Some(1_757_413_376.0),
+            fused_hbm_bytes: Some(861_339_648.0),
+            estimated_speedup: Some(2.04),
+            suggested_kernel: Some("fold per-row 1/rms into the second GEMM epilogue".to_string()),
+            confidence: Some("high".to_string()),
+        }
+    }
+
+    #[test]
+    fn render_markdown_matches_worked_example() {
+        let md = render(&[canonical_opp()], Format::Markdown);
+        assert!(md.contains("## Fusion Opportunities Detected"));
+        assert!(md.contains("GEMM-Residual-RMSNorm-GEMM"));
+        assert!(md.contains("Location: FX nodes g1, add, rms, g2"));
+        assert!(md.contains("Shape: M=8192, K0=4096, N=11008, K1=4096, dtype=bf16"));
+        assert!(md.contains("Baseline HBM traffic: 1757 MB"));
+        assert!(md.contains("CODA-fused HBM traffic: 861 MB"));
+        assert!(md.contains("~2.04×"));
+        assert!(
+            md.contains("upper bound"),
+            "N10 honesty caveat must be present"
+        );
+        assert!(md.contains("fold per-row 1/rms into the second GEMM epilogue"));
+        assert!(md.contains("Confidence: high"));
+    }
+
+    #[test]
+    fn render_empty_is_clean() {
+        let md = render(&[], Format::Markdown);
+        assert!(md.contains("No fusion opportunities detected."));
+    }
+
+    #[test]
+    fn render_json_is_schema_aligned_and_round_trips() {
+        let json = render(&[canonical_opp()], Format::Json);
+        let v: serde_json::Value = serde_json::from_str(&json).expect("valid json");
+        let arr = v["fusion_opportunities"]
+            .as_array()
+            .expect("opportunities under the schema key");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["pattern_id"], "A");
+        assert_eq!(arr[0]["estimated_speedup"], 2.04);
+        // It deserializes back into the schema type (the report is genuinely schema-aligned).
+        let back: Vec<FusionOpportunity> =
+            serde_json::from_value(v["fusion_opportunities"].clone()).expect("round-trips");
+        assert_eq!(back[0].confidence.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn render_ranks_multiple_by_speedup_desc() {
+        let make = |sp: f64, id: &str| {
+            let mut o = canonical_opp();
+            o.estimated_speedup = Some(sp);
+            o.location = Some(FusionLocation {
+                fx_node_ids: vec![id.to_string()],
+                src_lineno_range: None,
+            });
+            o
+        };
+        // Intentionally unsorted input; renderer must rank highest speedup first (also AC #3: ≥3).
+        let md = render(
+            &[make(1.20, "c"), make(2.04, "a"), make(1.50, "b")],
+            Format::Markdown,
+        );
+        assert!(md.contains("### #1:") && md.contains("### #2:") && md.contains("### #3:"));
+        let (p_high, p_mid, p_low) = (
+            md.find("2.04").unwrap(),
+            md.find("1.50").unwrap(),
+            md.find("1.20").unwrap(),
+        );
+        assert!(
+            p_high < p_mid && p_mid < p_low,
+            "ranked by speedup descending"
+        );
+    }
+
+    #[test]
+    fn render_is_honest_when_cost_absent() {
+        let mut opp = canonical_opp();
+        opp.shape = None;
+        opp.baseline_hbm_bytes = None;
+        opp.fused_hbm_bytes = None;
+        opp.estimated_speedup = None;
+        let md = render(&[opp], Format::Markdown);
+        assert!(md.contains("not estimated"), "no fabricated cost");
+        assert!(md.contains("GEMM-Residual-RMSNorm-GEMM"), "still reported");
+        assert!(md.contains("Confidence: high"));
+    }
+
+    #[test]
+    fn render_confidence_medium_for_decomposed() {
+        let mut opp = canonical_opp();
+        opp.confidence = Some("medium".to_string());
+        let md = render(&[opp], Format::Markdown);
+        assert!(md.contains("Confidence: medium"));
     }
 }
