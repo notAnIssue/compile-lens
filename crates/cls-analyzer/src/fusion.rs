@@ -229,6 +229,72 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
     out
 }
 
+// ── analytical HBM-traffic cost model (N10) ─────────────────────────────────────────────────
+//
+// A memory-bound roofline: total HBM bytes moved, baseline (four separate kernels) vs CODA-fused
+// (GEMM1+residual+partial-RMS in one kernel, an aux reduction, then GEMM2 applying the per-row
+// reciprocal-rms in its epilogue — the RMSNorm never materializes). The speedup is the byte ratio
+// under the memory-bound assumption: an **upper bound used to rank opportunities, not a promised
+// number** — real GEMMs are often compute-bound, so the achieved speedup is lower (the CODA paper
+// measures ~1.05–1.15x on LLaMA shapes). Bandwidth cancels in the ratio, so it is not needed here.
+
+/// The GEMM shapes a Pattern A opportunity spans: `RMSNorm(x·W0[M×K0→M×N] + z)·W1[N×K1→M×K1]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shape {
+    pub m: u64,
+    pub n: u64,
+    pub k0: u64,
+    pub k1: u64,
+}
+
+/// Default autotune tile width along N for the partial-statistics accounting (CODA uses 128).
+pub const DEFAULT_TILE_N: u64 = 128;
+
+/// Bytes per element for a dtype name. Inference activations default to 2 (bf16 / fp16).
+pub fn dtype_bytes(dtype: &str) -> u64 {
+    match dtype {
+        "fp64" | "float64" => 8,
+        "fp32" | "float32" => 4,
+        "fp8" | "float8" | "e4m3" | "e5m2" => 1,
+        _ => 2,
+    }
+}
+
+/// HBM bytes for the standard path: GEMM1, residual add, RMSNorm, GEMM2 as four separate kernels.
+/// `gemm_fixed` (weight reads + final output) is identical in both paths; the activations stream
+/// through HBM eight times (GEMM1 writes D; the add reads D, reads the residual, writes D'; RMSNorm
+/// reads D' twice and writes Y; GEMM2 reads Y).
+pub fn baseline_hbm_bytes(shape: &Shape, dtype_bytes: u64) -> u64 {
+    let gemm_fixed = gemm_fixed_elems(shape);
+    let activations = 8 * shape.m * shape.n;
+    (gemm_fixed + activations) * dtype_bytes
+}
+
+/// HBM bytes for the CODA-fused path. The activations stream through HBM three times (kernel A
+/// writes D' and reads the residual; kernel C reads D') — the RMSNorm is never materialized — plus a
+/// little fp32 traffic for the partial statistics and the per-row reciprocal-rms.
+pub fn coda_hbm_bytes(shape: &Shape, dtype_bytes: u64, tile_n: u64) -> u64 {
+    let gemm_fixed = gemm_fixed_elems(shape);
+    let activations = 3 * shape.m * shape.n;
+    let tiles = (shape.n / tile_n.max(1)).max(1);
+    // fp32 (4 bytes): partial stats written by A and read by aux; r written by aux and read by C.
+    let fp32 = 4 * (2 * shape.m * tiles + 2 * shape.m);
+    (gemm_fixed + activations) * dtype_bytes + fp32
+}
+
+/// Weight reads and final output (in elements) — unchanged by the fusion, so it appears in both.
+fn gemm_fixed_elems(shape: &Shape) -> u64 {
+    shape.m * shape.k0 + shape.k0 * shape.n + shape.n * shape.k1 + shape.m * shape.k1
+}
+
+/// Memory-bound speedup estimate: the HBM-traffic ratio. An upper bound for ranking, not a promise.
+pub fn estimated_speedup(baseline_bytes: u64, coda_bytes: u64) -> f64 {
+    if coda_bytes == 0 {
+        return 0.0;
+    }
+    baseline_bytes as f64 / coda_bytes as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,5 +475,58 @@ mod tests {
         );
         let ids = &found[0].location.as_ref().unwrap().fx_node_ids;
         assert_eq!(ids, &vec!["g1", "add", "rms", "g2"]);
+    }
+
+    #[test]
+    fn cost_model_on_the_canonical_llama_shape() {
+        // M=8192, K0=4096, N=11008, K1=4096, bf16 — the worked example.
+        let shape = Shape {
+            m: 8192,
+            n: 11008,
+            k0: 4096,
+            k1: 4096,
+        };
+        let db = dtype_bytes("bf16");
+        assert_eq!(db, 2);
+        let baseline = baseline_hbm_bytes(&shape, db);
+        let coda = coda_hbm_bytes(&shape, db, DEFAULT_TILE_N);
+        assert_eq!(baseline, 1_757_413_376);
+        assert_eq!(coda, 861_339_648);
+        assert!(coda < baseline, "fusion must move less HBM traffic");
+        let speedup = estimated_speedup(baseline, coda);
+        assert!(
+            (speedup - 2.04).abs() < 0.01,
+            "memory-bound speedup ~2.04x, got {speedup}"
+        );
+    }
+
+    #[test]
+    fn cost_model_scales_linearly_with_dtype_bytes() {
+        // The baseline is pure elementwise traffic, so fp32 moves exactly twice the bytes of bf16.
+        let shape = Shape {
+            m: 1024,
+            n: 1024,
+            k0: 512,
+            k1: 512,
+        };
+        let bf16 = baseline_hbm_bytes(&shape, dtype_bytes("bf16"));
+        let fp32 = baseline_hbm_bytes(&shape, dtype_bytes("fp32"));
+        assert_eq!(fp32, 2 * bf16);
+    }
+
+    #[test]
+    fn cost_model_fusion_always_saves_and_speedup_handles_zero() {
+        let shape = Shape {
+            m: 4096,
+            n: 4096,
+            k0: 4096,
+            k1: 4096,
+        };
+        let db = dtype_bytes("bf16");
+        let baseline = baseline_hbm_bytes(&shape, db);
+        let coda = coda_hbm_bytes(&shape, db, DEFAULT_TILE_N);
+        assert!(estimated_speedup(baseline, coda) > 1.0);
+        // Degenerate guard: never divide by zero.
+        assert_eq!(estimated_speedup(100, 0), 0.0);
     }
 }
