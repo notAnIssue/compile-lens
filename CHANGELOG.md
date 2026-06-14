@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Tool 5 (`kernel-roofline`) complete: a roofline-pruned autotune filter for Triton kernels. A
+three-layer cost model — a Williams theoretical lower bound, an empirical predictor (four
+corrections), and rank-correlation-gated pruning — ranks an autotune grid's configs so an autotuner
+measures only the predicted top-K, *with a measured guarantee*: it calibrates the predicted ranking
+against a small sample of real measurements (Spearman) and prunes only when that correlation holds,
+otherwise falling back to a full sweep — it never silently trusts a bad prediction, and on a kernel
+it cannot rank (a memory-bound kernel gives it no signal) it correctly measures everything. The model
+lives once in Rust (`cls-roofline`); the CLI and the Python `AutotuneHarness` both drive it over a
+JSON-file + subprocess boundary (ADR-006). Measurement is `proton` with a self-timed CUDA-events
+fallback. `RooflineCostModel::for_gpu()` is the stable entry the upcoming CODA fusion detector builds
+on.
+
 Tool 4 (`compile-lint`) complete: a static linter for `torch.compile` correctness anti-patterns. It
 scans source with the standard `ast` module — never executing it — flags candidates, and joins them
 against a curated correctness database where every entry cites a real PyTorch issue, a minimal repro,
@@ -24,6 +36,24 @@ reads the stored `.cls.json` and does not.
 
 ### Added
 
+- `cl kernel-roofline <session.cls.json> [--gpu NAME] [--kernel SUBSTR] [--list] [--top-k K] [--format markdown|json]`
+  — per-kernel roofline triage (Layer 1 theoretical lower bound + Layer 2 empirical predictor)
+  against a GPU spec; when the kernels carry measured runtimes, a grid-level calibration (Spearman)
+  and pruning decision (Layer 3). The `--format json` shape is what the autotune harness consumes.
+- `RooflineCostModel` (`cls-roofline` crate): `for_gpu(name)` binds the model to a registered GPU
+  (A100-SXM-80GB / H100-SXM / B200 — verified dense-BF16 peak + bandwidth); `predict()` composes
+  Layer 1 + Layer 2 into a full prediction; `pruning_decision()` is the rank-correlation gate
+  (ADR-018: Spearman, not Pearson — autotuning is a ranking task). `for_gpu()` is API-stable for
+  downstream tools (the CODA fusion detector builds on it).
+- `AutotuneHarness` (Python, `compile_lens.kernels`) — a predicted-vs-measured autotune sweep:
+  predict the grid (via `cl kernel-roofline` over a subprocess), measure a spread calibration sample
+  plus the predicted top-K, and report the fastest config with the pruning ratio it achieved, plus
+  `to_csv()` / `plot_predicted_vs_measured()`.
+- `KernelMetadataCollector` and `proton_adapter` (Python) — capture per-kernel features (PTX /
+  launch config / registers / spills) into `kernels[]`, and turn a proton hatchet trace or a
+  self-timed CUDA-events run into a `measurements` record (`source` = `proton` / `self_timed`).
+- A `kernels[]` + `roofline_predictions[]` section in the `.cls.json` schema, and a
+  rank-correlation soundness invariant in the `algorithmic-invariant` release-blocker CI job.
 - `cl compile-lint <path> --db <db.toml> -o <out.cls.json>` (Python front-end) — scan a `.py` file
   or directory with the Layer-1 AST scanner and write candidate findings; the database's detector
   rules drive operator-family detection (without `--db`, only the structural pattern fires).
