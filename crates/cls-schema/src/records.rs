@@ -126,6 +126,17 @@ pub struct FxNode {
     /// that differ here are classified `modified` by the diff.
     #[serde(default, skip_serializing_if = "indexmap::IndexMap::is_empty")]
     pub attrs: crate::JsonMap,
+    /// The node's output tensor shape, when the collector captured a *concrete* one from
+    /// `node.meta['val']`. Empty when unknown — meta absent, the value isn't a single tensor, or
+    /// the shape is dynamic (symbolic `SymInt`, which has no byte size). Tool 6's cost model reads
+    /// these to size HBM traffic; structure-only consumers (the WL-diff) ignore them. Added after
+    /// the collector's original contract (ADR-024) — older artifacts simply omit it (ADR-038).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub out_shape: Vec<u64>,
+    /// The node's output dtype as a torch name with the `torch.` prefix stripped (`bfloat16`,
+    /// `float32`). Absent under the same conditions as `out_shape`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_dtype: Option<String>,
 }
 
 /// One named compile phase with its wall-clock cost (`compile_phases[]`).
