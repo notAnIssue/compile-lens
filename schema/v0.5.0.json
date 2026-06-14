@@ -147,7 +147,9 @@
         "id": { "type": "string", "description": "Graph-unique node id; referenced by other nodes' inputs to encode an edge." },
         "op_type": { "type": "string", "description": "The operation, e.g. aten.matmul or a call_function target." },
         "inputs": { "type": "array", "items": { "type": "string" }, "description": "Ordered ids of upstream nodes this one consumes. Order is load-bearing: sub(a,b) != sub(b,a)." },
-        "attrs": { "type": "object", "additionalProperties": true, "description": "Node attributes (a constant's value, a dim parameter, …); a difference here makes the diff classify a node as modified." }
+        "attrs": { "type": "object", "additionalProperties": true, "description": "Node attributes (a constant's value, a dim parameter, …); a difference here makes the diff classify a node as modified." },
+        "out_shape": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Output tensor shape, when a concrete one was captured from node.meta['val']. Omitted when unknown (meta absent, not a single tensor, or a dynamic/symbolic shape). Read by Tool 6's cost model (ADR-038)." },
+        "out_dtype": { "type": "string", "description": "Output dtype as a torch name without the torch. prefix (bfloat16, float32); omitted under the same conditions as out_shape." }
       }
     },
 
