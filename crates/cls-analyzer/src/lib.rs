@@ -10,6 +10,7 @@
 
 pub mod cache_stability;
 pub mod divergence;
+pub mod fusion;
 pub mod lint;
 pub mod recompile;
 pub mod recompile_cluster;
