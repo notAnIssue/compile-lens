@@ -189,6 +189,28 @@ enum Command {
         format: SummaryFormat,
     },
 
+    /// Detect algebraic fusion opportunities in a collected session (Tool 6 — the CODA-style
+    /// GEMM-Residual-RMSNorm-GEMM detector). Reads the serialized FX graph, matches the pattern,
+    /// estimates baseline-vs-fused HBM traffic, and suggests an epilogue kernel — ranked by
+    /// estimated speedup. Suggest-only: it will not modify your graph or call any kernel.
+    FusionDetect {
+        /// The collected `.cls.json` session whose compiled graph(s) to analyze.
+        session: std::path::PathBuf,
+
+        /// Output format: `markdown` (default) or `json`.
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Markdown)]
+        format: SummaryFormat,
+
+        /// Drop opportunities whose estimated (memory-bound) speedup is below this. An opportunity
+        /// whose tensor shapes weren't captured has no estimate and is always kept.
+        #[arg(long, value_name = "FLOAT", default_value_t = 1.05)]
+        min_speedup: f64,
+
+        /// Keep at most this many opportunities, after ranking by estimated speedup.
+        #[arg(long, value_name = "N", default_value_t = 10)]
+        top_k: usize,
+    },
+
     /// Migrate an older `.cls.json` to the current schema. Pre-V1 there is no
     /// migration ladder yet: matching the current schema -> byte-copy; otherwise
     /// the migration is refused (CLS-E0003) and the user re-collects.
@@ -337,6 +359,13 @@ fn run(cli: Cli) -> Result<(), ClsError> {
             top_k,
             format,
         }) => kernel_roofline(session, gpu, kernel, list, top_k, format),
+
+        Some(Command::FusionDetect {
+            session,
+            format,
+            min_speedup,
+            top_k,
+        }) => fusion_detect(session, format, min_speedup, top_k),
 
         Some(Command::Migrate {
             input,
@@ -641,6 +670,29 @@ fn first_graph_nodes(artifact: &cls_schema::ClsArtifact) -> &[cls_schema::FxNode
         .first()
         .map(|g| g.nodes.as_slice())
         .unwrap_or(&[])
+}
+
+/// `cl fusion-detect` — Tool 6. Load a session, match CODA-style fusion opportunities in its
+/// compiled graph(s), estimate baseline-vs-fused HBM traffic, and render the report ranked by
+/// estimated speedup (`--min-speedup` filters, `--top-k` caps). Suggest-only and read-only: it never
+/// mutates the graph, runs a kernel, or needs torch — it reads the serialized FX graph the collector
+/// already wrote (ADR-037). Always exits 0 on a successful read: it is informational, not a CI gate.
+fn fusion_detect(
+    session: std::path::PathBuf,
+    format: SummaryFormat,
+    min_speedup: f64,
+    top_k: usize,
+) -> Result<(), ClsError> {
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let opportunities = cls_analyzer::fusion::analyze(&artifact);
+    let selected = cls_analyzer::fusion::select(opportunities, min_speedup, top_k);
+    // markdown|json; Text falls back to Markdown, as the other view subcommands do.
+    let render_format = match format {
+        SummaryFormat::Json => cls_analyzer::fusion::Format::Json,
+        SummaryFormat::Markdown | SummaryFormat::Text => cls_analyzer::fusion::Format::Markdown,
+    };
+    print!("{}", cls_analyzer::fusion::render(&selected, render_format));
+    Ok(())
 }
 
 /// `cl migrate` — unchanged from v0.5.0; kept under `run` so the dispatch
