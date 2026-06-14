@@ -8,6 +8,7 @@ end-to-end. The integration tests skip cleanly if torch is unavailable.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -33,12 +34,14 @@ class FakeNode:
         target: Any = None,
         args: tuple = (),
         kwargs: dict | None = None,
+        meta: dict | None = None,
     ) -> None:
         self.name = name
         self.op = op
         self.target = target
         self.args = args
         self.kwargs = kwargs or {}
+        self.meta = meta or {}
 
 
 def test_op_type_maps_targets_and_structural_markers() -> None:
@@ -86,6 +89,40 @@ def test_empty_inputs_and_attrs_are_omitted() -> None:
     dumped = node.model_dump(exclude_unset=True)
     assert "inputs" not in dumped
     assert "attrs" not in dumped
+
+
+def test_out_shape_and_dtype_captured_from_meta() -> None:
+    # aot_autograd leaves a FakeTensor in node.meta['val']; the serializer records its concrete
+    # shape and dtype (``torch.`` prefix stripped) for Tool 6's cost model (ADR-038).
+    val = SimpleNamespace(shape=(8192, 11008), dtype="torch.bfloat16")
+    node = _serialize_node(
+        FakeNode("g1", "call_function", target="aten.mm", meta={"val": val}), FakeNode
+    )
+    assert node.out_shape == [8192, 11008]
+    assert node.out_dtype == "bfloat16"
+
+
+def test_out_shape_omitted_when_meta_has_no_tensor() -> None:
+    # No meta (or a non-tensor val, e.g. an output node's tuple) -> both fields stay unset.
+    node = _serialize_node(FakeNode("p", "placeholder"), FakeNode)
+    dumped = node.model_dump(exclude_unset=True)
+    assert "out_shape" not in dumped
+    assert "out_dtype" not in dumped
+
+
+def test_out_shape_omitted_for_symbolic_shape() -> None:
+    # A dynamic shape carries SymInt dims (not plain ints); a symbol has no byte size, so the
+    # shape is dropped rather than guessed (N10).
+    class FakeSymInt:  # mimics torch.SymInt: not an int instance
+        pass
+
+    val = SimpleNamespace(shape=(8192, FakeSymInt()), dtype="torch.bfloat16")
+    node = _serialize_node(
+        FakeNode("g", "call_function", target="aten.mm", meta={"val": val}), FakeNode
+    )
+    dumped = node.model_dump(exclude_unset=True)
+    assert "out_shape" not in dumped
+    assert "out_dtype" not in dumped
 
 
 # ── redaction (no torch needed) ─────────────────────────────────────────────────────────

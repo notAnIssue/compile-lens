@@ -94,6 +94,29 @@ def _is_scalar(value: Any) -> bool:
     return isinstance(value, bool | int | float | str) or value is None
 
 
+def _tensor_meta(node: Any) -> tuple[list[int], str | None]:
+    """The node's concrete output shape and dtype from ``node.meta['val']``, for Tool 6's cost
+    model (ADR-038). ``aot_autograd`` traces with fake tensors, so each aten node's ``meta['val']``
+    is the FakeTensor it would produce — carrying ``.shape`` and ``.dtype``.
+
+    Returns ``([], None)`` (a graceful miss, not an error) whenever a concrete shape isn't
+    available: ``meta`` absent, the value isn't a single tensor (an ``output`` node's tuple has no
+    ``.shape``), or any dim is symbolic. A dynamic shape carries ``SymInt`` dims rather than plain
+    ``int``s, and a symbol has no byte size — so the cost stays unknown rather than guessed
+    (N10)."""
+    val = (getattr(node, "meta", None) or {}).get("val")
+    shape = getattr(val, "shape", None)
+    dtype = getattr(val, "dtype", None)
+    if shape is None or dtype is None:
+        return [], None
+    dims: list[int] = []
+    for dim in shape:
+        if type(dim) is not int:  # a SymInt is not an int — dynamic/symbolic, no concrete size
+            return [], None
+        dims.append(dim)
+    return dims, str(dtype).removeprefix("torch.")
+
+
 def _serialize_node(node: Any, node_cls: type) -> FxNode:
     """Serialize one FX node to the contract: ordered input ids from the node references in its
     args then kwargs, and scalar constants captured as attrs keyed by position / kwarg name.
@@ -111,11 +134,17 @@ def _serialize_node(node: Any, node_cls: type) -> FxNode:
         if _is_scalar(val):
             attrs[key] = val
 
+    out_shape, out_dtype = _tensor_meta(node)
+
     fields: dict[str, Any] = {"id": str(node.name), "op_type": _op_type(node)}
     if inputs:
         fields["inputs"] = inputs
     if attrs:
         fields["attrs"] = attrs
+    if out_shape:
+        fields["out_shape"] = out_shape
+    if out_dtype is not None:
+        fields["out_dtype"] = out_dtype
     return FxNode(**fields)
 
 

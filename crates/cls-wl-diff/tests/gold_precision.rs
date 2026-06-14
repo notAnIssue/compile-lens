@@ -18,6 +18,8 @@ fn node(id: &str, op_type: &str, inputs: &[&str]) -> FxNode {
         op_type: op_type.to_string(),
         inputs: inputs.iter().map(|s| s.to_string()).collect(),
         attrs: Default::default(),
+        out_shape: Vec::new(),
+        out_dtype: None,
     }
 }
 

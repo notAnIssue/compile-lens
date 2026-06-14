@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The fusion detector (Tool 6) now estimates HBM traffic end-to-end. The FX collector captures each
+node's output shape and dtype (read from `node.meta['val']`) as typed `FxNode` fields, and the
+analyzer derives each matched pattern's GEMM dimensions (M/N/K0/K1/dtype) and runs the cost model —
+so a `FusionOpportunity` now carries its baseline-vs-fused HBM byte traffic and estimated speedup,
+not just its location and suggested kernel. Shape capture is best-effort and additive: a graph
+written before this existed, or one with a dynamic (symbolic) shape, leaves the cost unset rather
+than guessing it (ADR-038).
+
 Tool 5 (`kernel-roofline`) complete: a roofline-pruned autotune filter for Triton kernels. A
 three-layer cost model — a Williams theoretical lower bound, an empirical predictor (four
 corrections), and rank-correlation-gated pruning — ranks an autotune grid's configs so an autotuner
