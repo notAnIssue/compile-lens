@@ -149,3 +149,14 @@ jobs:
           CLS_LOG: info
           CLS_LOG_FORMAT: json
         run: ./target/debug/cl --version 2>&1 | grep -q '"level":"INFO"'
+
+  fingerprint:
+    name: Private fingerprint sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Run the same hook that guards commits, across every tracked source file, so a push that
+      # bypassed the local pre-commit hooks cannot slip an internal planning identifier into the
+      # public repo (ADR-028). Single-sourced: the patterns and whitelist live in the hook script.
+      - name: scan tracked files for internal planning identifiers
+        run: git ls-files -z -- '*.md' '*.rs' '*.py' '*.toml' '*.yml' | xargs -0 bash scripts/check_private_fingerprints.sh
