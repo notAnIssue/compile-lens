@@ -82,3 +82,70 @@ fn test_commutative_operand_swap_is_silent() {
         );
     }
 }
+
+/// Build a 3-operand non-commutative op and a counterpart with the FIRST operand stationary and the
+/// other two swapped, then diff them. The stationary operand is the key: it lets neighborhood
+/// expansion *match* the op (unlike a full 2-operand swap, where neither operand keeps its position
+/// so the pair is only recovered later). This exercises the distinct path of a *matched* pair whose
+/// input ORDER changed — the partial-reorder silent miss.
+fn diff_partial_reorder(op_type: &str) -> cls_wl_diff::IrGraphDiff {
+    let base = [
+        node("a", "placeholder", &[]),
+        node("b", "placeholder", &[]),
+        node("c", "placeholder", &[]),
+        node("n", op_type, &["a", "b", "c"]),
+    ];
+    let head = [
+        node("a", "placeholder", &[]),
+        node("b", "placeholder", &[]),
+        node("c", "placeholder", &[]),
+        node("n", op_type, &["a", "c", "b"]), // a stays at position 0; b and c swap
+    ];
+    diff_graphs(&FxGraph::from_nodes(&base), &FxGraph::from_nodes(&head))
+}
+
+/// Partial operand reorder on a non-commutative op MUST be reported as exactly one modified node.
+/// This is the case the full-swap test cannot reach: `aten.addmm(bias, mat1, mat2)` — what every
+/// biased `nn.Linear` lowers to — becoming `aten.addmm(bias, mat2, mat1)` keeps `bias` at position
+/// 0, so expansion matches the op and the order change has to be caught at classification, not
+/// silently dropped.
+#[test]
+fn test_noncommutative_partial_operand_reorder_is_modified() {
+    for op in ["aten.addmm.default", "aten.baddbmm.default"] {
+        let d = diff_partial_reorder(op);
+        assert_eq!(
+            d.modified.len(),
+            1,
+            "{op}: partial operand reorder MUST be one modified node, got modified={:?} added={:?} removed={:?}",
+            d.modified,
+            d.added,
+            d.removed
+        );
+        assert!(
+            d.added.is_empty() && d.removed.is_empty(),
+            "{op}: partial reorder must be modified, not add/remove (added={:?} removed={:?})",
+            d.added,
+            d.removed
+        );
+    }
+}
+
+/// Guard the reorder check against over-firing: a 3-operand op with identical inputs in the SAME
+/// order is a clean match and MUST stay silent (empty diff).
+#[test]
+fn test_identical_multi_operand_op_is_not_modified() {
+    let nodes = [
+        node("a", "placeholder", &[]),
+        node("b", "placeholder", &[]),
+        node("c", "placeholder", &[]),
+        node("n", "aten.addmm.default", &["a", "b", "c"]),
+    ];
+    let d = diff_graphs(&FxGraph::from_nodes(&nodes), &FxGraph::from_nodes(&nodes));
+    assert!(
+        d.modified.is_empty() && d.added.is_empty() && d.removed.is_empty(),
+        "identical multi-operand op must be an empty diff, got modified={:?} added={:?} removed={:?}",
+        d.modified,
+        d.added,
+        d.removed
+    );
+}
