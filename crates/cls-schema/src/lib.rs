@@ -34,6 +34,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 mod kernels;
+mod non_finite;
 mod records;
 mod session;
 

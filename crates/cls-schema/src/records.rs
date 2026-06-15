@@ -73,7 +73,11 @@ pub struct Recompilation {
     pub failed_guard: Option<FailedGuard>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub occurred_at_step: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub wall_clock_ms: Option<f64>,
 }
 
@@ -143,7 +147,11 @@ pub struct FxNode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompilePhase {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub duration_ms: Option<f64>,
 }
 
@@ -171,7 +179,11 @@ pub struct InternalStateSnapshot {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Iteration {
     pub iteration_index: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub timestamp_ms: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub guard_evaluations: Vec<GuardEvaluation>,
@@ -238,7 +250,11 @@ pub struct Divergence {
     pub first_divergent_layer: Option<String>,
     /// Max absolute element-wise difference at that layer; absent for a shape mismatch or when
     /// nothing diverged.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub max_abs_diff: Option<f64>,
     /// How many layers were numerically compared (both sides present and tensor-valued).
     pub num_layers_compared: u64,
@@ -282,13 +298,25 @@ pub struct FusionOpportunity {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shape: Option<FusionShape>,
     /// Standard-path HBM traffic in bytes (analytical roofline estimate, not measured).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub baseline_hbm_bytes: Option<f64>,
     /// CODA-fused HBM traffic in bytes (analytical roofline estimate).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub fused_hbm_bytes: Option<f64>,
     /// `baseline / fused` under the memory-bound assumption; analytical only (N10).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub estimated_speedup: Option<f64>,
     /// Suggested `epilogue_kit.ops.*` kernel name — a string reference only (the seam).
     #[serde(default, skip_serializing_if = "Option::is_none")]
