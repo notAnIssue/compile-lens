@@ -30,11 +30,23 @@ pub struct LaunchConfig {
 /// `1.2e10`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KernelFeatures {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub flops: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub bytes_loaded: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub bytes_stored: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub block_size: Option<u64>,
@@ -50,11 +62,23 @@ pub struct KernelFeatures {
 pub struct KernelMeasurements {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub iterations: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub mean_us: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub median_us: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub p99_us: Option<f64>,
     /// Data source: `proton` or `self_timed`. Kept `String` (not enum) for the same
     /// forward-compat reason as the lint vocabularies.
@@ -76,7 +100,11 @@ pub struct Kernel {
     pub kernel_source_excerpt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_config: Option<LaunchConfig>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub occupancy_hint: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Option<KernelFeatures>,
@@ -92,11 +120,23 @@ pub struct Kernel {
 pub struct GpuSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub peak_compute_tflops_bf16: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub peak_bw_gbps: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub l2_cache_mb: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sm_count: Option<u64>,
@@ -106,9 +146,17 @@ pub struct GpuSpec {
 /// `f64` (not unsigned) since correlations may be negative.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Calibration {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub pearson_correlation: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub spearman_correlation: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub calibration_verdict: Option<String>,
@@ -122,7 +170,11 @@ pub struct Calibration {
 pub struct PruningDecision {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub threshold_rank_correlation: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configs_total: Option<u64>,
@@ -149,20 +201,40 @@ pub struct RooflinePrediction {
     pub kernel_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gpu_spec: Option<GpuSpec>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub arithmetic_intensity: Option<f64>,
     /// `memory` or `compute`. Kept `String` for forward compat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bound_type: Option<String>,
     /// Ideal Williams roofline; reference only, not used for pruning.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub theoretical_lower_bound_us: Option<f64>,
     /// After 4 corrections; used for ranking/pruning.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub empirical_predictor_us: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub measured_us: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::non_finite::opt"
+    )]
     pub achieved_vs_predictor: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub corrections_applied: Vec<String>,
