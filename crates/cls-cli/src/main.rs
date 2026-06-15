@@ -462,9 +462,10 @@ fn recompile_summary(
     Ok(())
 }
 
-/// `cl diff` skeleton (Tool 2a). Validates that both the `--base` and `--head`
-/// artifacts are reachable, then exits with the typed `NotYetImplemented` error.
-/// The WL-signature diff algorithm (`cls-wl-diff`) lands in upcoming Phase 2 PRs.
+/// `cl cache-stability` (Tool 2b, Mode B). Load a session and flag the silently-wrong cache bug:
+/// iterations where the module's mutable state drifted, the compiled graph was reused from cache,
+/// and the output stayed frozen — the cache key missed the state change and served a stale graph.
+/// Reads the per-iteration data; renders markdown|json (Text falls back to Markdown).
 fn cache_stability(session: std::path::PathBuf, format: SummaryFormat) -> Result<(), ClsError> {
     // `load_artifact` reads + version-gates + parses; a missing file surfaces as CLS-E0001.
     let artifact = cls_schema_migrate::load_artifact(&session)?;
