@@ -1,4 +1,4 @@
-//! Layer 3 of the cost model: the calibrated pruning decision (design.md §8.5, ADR-018).
+//! Layer 3 of the cost model: the calibrated pruning decision (ADR-018).
 //!
 //! Autotuning measures the runtime of many candidate configs and keeps the fastest. Layer 2 ranks
 //! them cheaply; Layer 3 decides **how much of that ranking to trust** — how aggressively to prune
@@ -7,8 +7,8 @@
 //! **Rank correlation, not Pearson (ADR-018).** Autotuning is a *ranking* task: what matters is that
 //! the fast configs sort near the top (top-K recall), not that the predicted microseconds track the
 //! measured ones linearly. A high Pearson correlation can coexist with a wrong top-K order, so the
-//! gate uses **Spearman's rank correlation**. (design.md §8.5 still shows a Pearson gate; that is the
-//! pre-ADR-018 text, superseded here — the schema field is `threshold_rank_correlation`.)
+//! gate uses **Spearman's rank correlation** (ADR-018; an earlier draft gated on Pearson, now
+//! superseded — the schema field is `threshold_rank_correlation`).
 //!
 //! Three tiers, on the Spearman correlation between predicted and measured runtimes:
 //! - **≥ 0.8** → `aggressive`: trust the ranking, measure only the top-K.
