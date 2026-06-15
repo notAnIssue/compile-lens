@@ -74,13 +74,16 @@ pub fn classify_residual(
         .collect();
 
     // A matched pair is `modified` when its content changed: a structural match whose attributes
-    // differ, or a recovered pair (its operands were reordered).
+    // differ, a recovered pair (operands reordered, matched only by `recover_reordered`), or a
+    // *structurally matched* non-commutative pair whose operands were reordered — caught by
+    // expansion via a stationary operand, so it never reached recovery (see `is_operand_reorder`).
     let recovered_set: IndexSet<&str> = recovered.iter().map(|(b, _)| b.as_str()).collect();
     let modified: Vec<(String, String)> = all_matched
         .iter()
         .filter(|(base_id, head_id)| {
             recovered_set.contains(base_id.as_str())
                 || before.attrs_of(base_id) != after.attrs_of(head_id)
+                || is_operand_reorder(before, after, &all_matched, commutativity, base_id, head_id)
         })
         .map(|(base_id, head_id)| (base_id.clone(), head_id.clone()))
         .collect();
@@ -181,6 +184,58 @@ fn recover_reordered(
         }
     }
     recovered
+}
+
+/// True when a *matched* non-commutative pair has the same operands in a *different* order — an
+/// operand reorder neighborhood expansion matched (via a stationary operand that kept its position)
+/// but never flagged. This is the partial-reorder counterpart to [`recover_reordered`]: that one
+/// handles pairs expansion left *unmatched* (a full swap, where no operand keeps its position); when
+/// at least one operand stays put the pair gets matched, so the order change has to be caught here
+/// at classification time. `aten.addmm(bias, mat1, mat2)` → `aten.addmm(bias, mat2, mat1)` (every
+/// biased `nn.Linear`) is the canonical case.
+///
+/// Commutative ops are exempt: their operand order is not semantic, and the signature already sorts
+/// their inputs (so a commutative reorder matches cleanly and must stay silent). Only fires when the
+/// in-graph operands are the same multiset in a different order — a genuine reorder, never a
+/// different-operand change (those surface structurally elsewhere).
+fn is_operand_reorder(
+    before: &FxGraph,
+    after: &FxGraph,
+    matched: &IndexMap<String, String>,
+    commutativity: &CommutativitySet,
+    base: &str,
+    head: &str,
+) -> bool {
+    let Some(op) = before.op_type_of(base) else {
+        return false;
+    };
+    if commutativity.is_commutative(op) {
+        return false;
+    }
+    // Base's in-graph inputs, in order, mapped through the matching; require all matched so the
+    // comparison is well-defined (an unmatched input means we can't tell — stay silent).
+    let mapped: Option<Vec<&str>> = before
+        .inputs_of(base)
+        .iter()
+        .filter(|i| before.op_type_of(i).is_some())
+        .map(|i| matched.get(i).map(String::as_str))
+        .collect();
+    let Some(mapped) = mapped else { return false };
+    let head_seq: Vec<&str> = after
+        .inputs_of(head)
+        .iter()
+        .filter(|i| after.op_type_of(i).is_some())
+        .map(String::as_str)
+        .collect();
+    if mapped.len() < 2 || mapped.len() != head_seq.len() {
+        return false; // need ≥2 in-graph operands of equal count to have a reorder
+    }
+    // Same operands (as a multiset) but a different order == a reorder.
+    let mut mapped_sorted = mapped.clone();
+    mapped_sorted.sort_unstable();
+    let mut head_sorted = head_seq.clone();
+    head_sorted.sort_unstable();
+    mapped_sorted == head_sorted && mapped != head_seq
 }
 
 /// Fraction of `base`'s in-graph neighbors (inputs + consumers) whose match is a neighbor of
