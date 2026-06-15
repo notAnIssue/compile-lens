@@ -3,7 +3,7 @@
 //!
 //! This crate is the Rust half of the *sole* cross-language contract between the Python
 //! collectors (which write `.cls.json`) and the Rust analyzers (which read it). There is
-//! no PyO3 and no IPC — the file on disk is the API (design.md §5.4). The types here
+//! no PyO3 and no IPC — the file on disk is the API. The types here
 //! mirror [`schema/v0.5.0.json`] 1:1.
 //!
 //! See ADR-021 for the *layout* decision (semantic-domain hybrid; nest objects, flatten

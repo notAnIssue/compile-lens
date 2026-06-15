@@ -1,4 +1,4 @@
-//! `diff_graphs` — the three-phase compile-diff, assembled (Tool 2a, design §8.2.5).
+//! `diff_graphs` — the three-phase compile-diff, assembled (Tool 2a).
 //!
 //! This ties the phases into one pure function: WL-signature anchoring → neighborhood expansion →
 //! residual classification. Given two captured graphs it returns an [`IrGraphDiff`] — what was

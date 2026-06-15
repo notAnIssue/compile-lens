@@ -6,7 +6,7 @@
 //!
 //! Usage: `cargo run --package cls-schema --example roundtrip -- <input.json> <output.json>`
 //!
-//! This is the same file + subprocess control-flow the toolkit uses (design.md ADR-006):
+//! This is the same file + subprocess control-flow the toolkit uses:
 //! no FFI — data crosses the language boundary only as a JSON file.
 
 use std::process::ExitCode;

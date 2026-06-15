@@ -37,7 +37,7 @@ What is missing is the **interpretation / CI-gate / team-workflow** layer on top
 2. **CI gating** — turning a "torch.compile got slower in this PR" hunch into a deterministic SARIF finding a reviewer can block on.
 3. **Team workflow** — a single `cl.session()` context that captures everything a reviewer or on-call needs, exportable as one HTML report.
 
-compile-lens wraps the official tools (it does not rewrite them) and fills those three gaps. It is **not** a replacement for `torch.compile`, a fuzzer, a correctness oracle, or a competing compiler — see [§1.4 of the design doc](./docs/00_design/design.md#14-not-this) for the explicit non-goals.
+compile-lens wraps the official tools (it does not rewrite them) and fills those three gaps. It is **not** a replacement for `torch.compile`, a fuzzer, a correctness oracle, or a competing compiler — those non-goals are explicit and out of scope.
 
 ---
 
@@ -120,7 +120,7 @@ Triggered by: 3 distinct guard categories
 
 ## Documentation
 
-- [Design doc](./docs/00_design/design.md) — architecture, design principles, ADR index
+- [Design decisions (ADRs)](./docs/02_design_decisions/) — architecture and design-principle rationale
 - [Roadmap](./docs/01_roadmap.md) — phase-by-phase plan
 - [Tool pages](./docs/03_tools/) — one page per tool, with worked examples and limitations
 - [Security policy](./SECURITY.md) — vulnerability reporting, disclosure timeline

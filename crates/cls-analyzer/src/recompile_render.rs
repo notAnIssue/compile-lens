@@ -24,7 +24,7 @@ use crate::recompile::{
 /// crate has no CLI dependency (the CLI maps its own enum onto this one).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Format {
-    /// Human-readable Markdown — the default `cl recompile-summary` output (design.md §6.1).
+    /// Human-readable Markdown — the default `cl recompile-summary` output.
     Markdown,
     /// Machine-readable pretty JSON — the findings struct serialized verbatim.
     Json,

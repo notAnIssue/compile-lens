@@ -183,7 +183,7 @@ needs Tool 2a + the hero form.)
 - Recompile-summary output rendering + wired CLI — `cl recompile-summary <session.cls.json>`
   now runs Tool 1 and prints a report instead of returning `NotYetImplemented`. Three
   `--format` shapes via `cls_analyzer::recompile_render`: `markdown` (default, the
-  human-readable summary from design.md §6.1 — total + per-axis guard clusters with their
+  human-readable summary — total + per-axis guard clusters with their
   value transitions + ranked suggestions), `json` (the findings struct serialized verbatim,
   the machine-readable contract), and `text` (plain layout for non-Markdown terminals).
   Adding `--baseline <earlier.cls.json>` switches to the regression diff (added / grown /
@@ -271,9 +271,9 @@ needs Tool 2a + the hero form.)
 - `scripts/check_private_fingerprints.sh` — pre-commit hook that refuses
   commits containing identifiers from internal planning notes (see ADR-028
   for the exact pattern families).
-- ADR-028 — *one naming namespace, anchored in `design.md`; private
-  identifiers CI-gated*. Closes the leak class addressed retroactively by
-  the `v0.5.0-alpha.0` cleanup PRs.
+- ADR-028 — *one public naming namespace; private identifiers CI-gated*.
+  Closes the leak class addressed retroactively by the `v0.5.0-alpha.0`
+  cleanup PRs.
 
 ### Changed
 

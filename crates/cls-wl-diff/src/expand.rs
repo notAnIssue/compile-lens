@@ -1,4 +1,4 @@
-//! Neighborhood expansion for the compile-diff (Tool 2a, design §8.2.5 Phase 2).
+//! Neighborhood expansion for the compile-diff (Tool 2a, Phase 2).
 //!
 //! Anchors (from the signature phase) are the nodes we are sure about. Most nodes are not unique
 //! enough to anchor on their own, but they sit next to ones that are. This phase grows the match
@@ -27,8 +27,8 @@ use indexmap::{IndexMap, IndexSet};
 use crate::signature::{Anchor, FxGraph};
 use crate::CommutativitySet;
 
-/// How far from an anchor the expansion reaches. A hyperparameter, not a correctness bound
-/// (design §8.2.5): three hops covers a node's local structure without letting one anchor's match
+/// How far from an anchor the expansion reaches. A hyperparameter, not a correctness bound —
+/// three hops covers a node's local structure without letting one anchor's match
 /// run away across the whole graph.
 const D_MAX: usize = 3;
 
@@ -143,8 +143,8 @@ fn try_match(
     true
 }
 
-/// Fraction of a graph's distinct signatures that belong to exactly one node — the ambiguity score
-/// (design §8.2.5). `1.0` when every node is structurally unique; lower with more look-alikes. An
+/// Fraction of a graph's distinct signatures that belong to exactly one node — the ambiguity score.
+/// `1.0` when every node is structurally unique; lower with more look-alikes. An
 /// empty graph is vacuously `1.0`.
 pub fn anchor_uniqueness_ratio(graph: &FxGraph, commutativity: &CommutativitySet) -> f64 {
     let signatures = graph.signatures(commutativity);

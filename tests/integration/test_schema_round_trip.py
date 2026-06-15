@@ -5,8 +5,8 @@ bindings agree on schema v0.5.0: an artifact survives Python -> Rust -> Python (
 reverse) with its fields intact, and each side serializes deterministically.
 
 The Rust side is exercised through the `cls-schema` `roundtrip` example via subprocess —
-the same file + subprocess control-flow the real toolkit uses (design.md ADR-006: data
-crosses the boundary only as a JSON file, no FFI).
+the same file + subprocess control-flow the real toolkit uses (data crosses the boundary
+only as a JSON file, no FFI).
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Command-line entry point for compile-lens (the ``cl`` console script).
 
-This is a thin dispatcher (design.md P7): the real work lives in the library
+This is a thin dispatcher: the real work lives in the library
 (``compile_lens`` collectors) and the Rust analyzers. Most subcommands are still
 placeholders that report "not implemented yet"; each lands in a later phase. The wired
 one is ``collect`` (Tool 1), which drives :class:`RecompileCollector` to write a
@@ -32,8 +32,8 @@ _SUBCOMMANDS: dict[str, str] = {
 
 def _add_collect_args(sp: argparse.ArgumentParser) -> None:
     """Wire ``cl collect``'s flags — the mutually-exclusive mode group + output + redaction,
-    mirroring the Rust ``cl collect`` surface (design.md ADR-006: the Python ``cl`` is the
-    user-facing front-end; the Rust binary is invoked for analysis)."""
+    mirroring the Rust ``cl collect`` surface (the Python ``cl`` is the user-facing
+    front-end; the Rust binary is invoked for analysis)."""
     mode = sp.add_mutually_exclusive_group(required=True)
     mode.add_argument(
         "--from-logs", metavar="PATH", help="Mode A — a TORCH_LOGS=recompiles capture"
@@ -62,7 +62,7 @@ def _add_collect_args(sp: argparse.ArgumentParser) -> None:
 def _add_compile_lint_args(sp: argparse.ArgumentParser) -> None:
     """Wire ``cl compile-lint``'s flags. The Python front-end *scans* source into a ``.cls.json``;
     the Rust ``cl compile-lint <artifact>`` then analyzes it against the correctness database
-    (design.md ADR-006; the unified single-command front-end is the Phase 7 hero)."""
+    (the unified single-command front-end is the Phase 7 hero)."""
     sp.add_argument("path", metavar="PATH", help="a .py file, or a directory of .py files, to scan")
     sp.add_argument(
         "-o",
@@ -146,7 +146,7 @@ def _run_compile_lint(args: argparse.Namespace) -> int:
     """Scan ``args.path`` for Tool 4 anti-patterns and write the candidate ``.cls.json``.
 
     This is the scan half (Layer-1, static AST); run the Rust ``cl compile-lint <output>`` to
-    analyze it against the correctness database and gate CI on its exit code (design.md ADR-006).
+    analyze it against the correctness database and gate CI on its exit code.
     """
     from compile_lens.collectors.lint_collect import LintCollector
     from compile_lens.correctness_db import load_operator_rules

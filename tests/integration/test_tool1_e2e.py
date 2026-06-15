@@ -8,8 +8,7 @@ Drives the full pipeline the way the toolkit actually runs it, across the langua
 then asserts the rendered findings against the committed per-fixture oracle
 (`<fixture>.expected.json`). The collector runs as a Python API call (Mode A/B parse text,
 no torch needed); the analyzer runs as the built `cl` binary via subprocess — the same
-file + subprocess control-flow real use takes (design.md ADR-006: the boundary is a JSON
-file, not FFI).
+file + subprocess control-flow real use takes (the boundary is a JSON file, not FFI).
 
 Scope note: the oracles' source-attribution fields and *live* cross-PyTorch-version capture
 (2.5 / 2.6 / nightly) are not exercised here — attribution isn't surfaced in Tool 1's findings

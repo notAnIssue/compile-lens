@@ -6,7 +6,7 @@
 //! applied in its epilogue, removing the full-tensor RMSNorm materialization between the two GEMMs).
 //! It is **suggest-only**: it reads the serialized graph, never mutates it, and never runs a kernel.
 //!
-//! Three disciplines bound the tool (design source-of-truth: `coda_feature.md`):
+//! Three disciplines bound the tool:
 //!   * **forward-only (N5)** — backward subgraphs are never analyzed: the op matchers name only
 //!     *forward* ops (`is_rms_norm` matches `aten.rms_norm`, never `aten.rms_norm_backward`), and a
 //!     graph carrying any backward-marked op is skipped wholesale;

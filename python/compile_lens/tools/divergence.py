@@ -61,7 +61,7 @@ class DivergenceSession:
     """Context manager that captures per-submodule output activations from an eager and a compiled
     model, for localizing the first divergent layer.
 
-    Usage (design §8.3)::
+    Usage::
 
         with divergence_session(model_eager, model_compiled) as div:
             model_eager(x)
@@ -108,7 +108,7 @@ class DivergenceSession:
         return sorted(set(self.eager_activations) & set(self.compiled_activations))
 
     def report(self, rtol: float = 1e-3, atol: float = 1e-5) -> DivergenceFindings:
-        """Localize the first layer where eager and compiled activations diverge (design §8.3)."""
+        """Localize the first layer where eager and compiled activations diverge."""
         return localize_divergence(self.eager_activations, self.compiled_activations, rtol, atol)
 
 
@@ -207,7 +207,7 @@ def accuracy_minifier() -> Iterator[MinifierStatus]:
 
 
 def divergence_session(model_eager: Any, model_compiled: Any) -> DivergenceSession:
-    """Open a divergence session over an eager and a compiled model (design §8.3)."""
+    """Open a divergence session over an eager and a compiled model."""
     return DivergenceSession(model_eager, model_compiled)
 
 

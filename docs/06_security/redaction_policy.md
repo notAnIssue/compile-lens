@@ -2,9 +2,6 @@
 
 **Related**: `threat_model.md` (same directory), `../../SECURITY.md`
 
-> `§16.x` references point to sections of the project design document (`design.md`,
-> maintained in the planning repo).
-
 ---
 
 ## 1. Policy levels

@@ -9,7 +9,7 @@
 
 ## Context
 
-design.md discipline **D8** requires every user-facing error to render five parts: a
+The project's error-UX discipline requires every user-facing error to render five parts: a
 stable error code (`CLS-EXXXX`), an optional source span, a cause chain, an actionable
 hint, and a documentation link. Rust's `std::error::Error` provides almost none of this —
 at best a `Display` message and a `source()` chain. The project needs a typed error enum

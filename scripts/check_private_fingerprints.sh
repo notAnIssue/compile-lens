@@ -3,7 +3,7 @@
 # Pre-commit hook: refuse to commit files containing identifiers from internal
 # planning notes that do not ship in this repository.
 #
-# Two pattern families are forbidden:
+# Three pattern families are forbidden:
 #
 #   1. Paths into the maintainer's planning tree:
 #        colibri/ , assets/notes/
@@ -65,6 +65,16 @@ for file in "$@"; do
   if grep -nE '(^|[^A-Za-z0-9])S[0-9]+\.[0-9XN]+([^A-Za-z0-9]|$)' "$file" >/dev/null 2>&1; then
     echo "FAIL $file : internal section ID (S<phase>.<num>)"
     grep -nE '(^|[^A-Za-z0-9])S[0-9]+\.[0-9XN]+([^A-Za-z0-9]|$)' "$file" | sed 's/^/    /'
+    failures=$((failures + 1))
+  fi
+
+  # Pattern 3: references to the private planning design docs. `design.md` and `coda_feature.md`
+  # are the maintainer's planning documents and are NOT in this repository; naming them — or citing
+  # their internal sections as `design §<num>` — leaks the structure of private work. The `\b` keeps
+  # the unrelated repo doc `sandbox_design.md` clear.
+  if grep -nE '\bdesign\.md|coda_feature|\bdesign §[0-9]' "$file" >/dev/null 2>&1; then
+    echo "FAIL $file : reference to a private planning doc (design.md / coda_feature.md / 'design §N')"
+    grep -nE '\bdesign\.md|coda_feature|\bdesign §[0-9]' "$file" | sed 's/^/    /'
     failures=$((failures + 1))
   fi
 done

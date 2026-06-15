@@ -1,9 +1,9 @@
-# ADR-028: One naming namespace, anchored in `design.md`; private identifiers CI-gated
+# ADR-028: One public naming namespace; private identifiers CI-gated
 
 - **Status**: Accepted
 - **Date**: 2026-05-31
 - **Deciders**: project maintainer
-- **Related**: ADR-021 (schema layout), ADR-022 (error handling), ADR-027 (unknown-field capture); `design.md` §15.8 (engineering disciplines).
+- **Related**: ADR-021 (schema layout), ADR-022 (error handling), ADR-027 (unknown-field capture); the engineering disciplines (D7–D11).
 
 ## Context
 
@@ -35,10 +35,10 @@ needs a mechanical gate, not a vocabulary change.
 ## Decision
 
 **One identifier namespace is allowed in artifacts that travel with this
-repository, and it is the namespace `design.md` and the ADR series already
-establish.** Specifically:
+repository, and it is the namespace the public design docs and the ADR series
+already establish.** Specifically:
 
-- **Tools** by name and number from `design.md` §3 — *Tool 1 (recompile aggregator)*, *Tool 2 (compile-diff)*, …
+- **Tools** by name and number — *Tool 1 (recompile aggregator)*, *Tool 2 (compile-diff)*, …
 - **Crates** by their cargo name — `cls-schema`, `cls-errors`, `cls-cli`, …
 - **Engineering disciplines** by their design-doc tag — *D7 algorithm*, *D8 error UX*, … *D11 security*.
 - **Architectural decisions** by ADR number — *ADR-021*, *ADR-022*, *ADR-027*.
@@ -95,8 +95,8 @@ contributor will read.
   planning. The granularity gap reappears as internal scratch notes that drift
   out of sync with the PR list.
 - **Option C — Keep section-level planning private; gate private identifiers
-  out of public artifacts; reuse `design.md`'s existing namespace for public
-  reference.** Chosen.
+  out of public artifacts; reuse the public design docs' existing namespace for
+  public reference.** Chosen.
 
 ### Weighted decision matrix
 

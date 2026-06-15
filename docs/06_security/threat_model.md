@@ -2,8 +2,7 @@
 
 **Related**: `redaction_policy.md` (same directory), `../../SECURITY.md`
 
-> `§16.x` references point to sections of the project design document (`design.md`,
-> maintained in the planning repo); the corresponding mitigations are implemented across
+> Each threat below names its mitigation inline; the mitigations are implemented across
 > this repo's `docs/` and `crates/`.
 
 ---
@@ -58,9 +57,9 @@ teammate or posts it on Show HN. The report contains:
 **Attacker**: the report recipient (intended teammate, or the public).
 
 **Mitigation** (MVP-required):
-- §16.3 default redaction policy `default-strict` scrubs paths (relative), command
+- default redaction policy `default-strict` scrubs paths (relative), command
   (token-scrub regex), source excerpts (omitted by default), kernel source (omitted by default)
-- §16.4 `cl scrub` CLI sanitizes before sharing (`--dry-run` shows what will be scrubbed)
+- `cl scrub` CLI sanitizes before sharing (`--dry-run` shows what will be scrubbed)
 - HTML report header includes a redaction-policy badge so the recipient knows the level
 
 **Residual risk**: a user deliberately selects `internal` or `confidential` and then shares.
@@ -130,7 +129,7 @@ static `.html` file with no fetch API calls.
 **Attacker**: a compromised or prompt-injected LLM agent.
 
 **Mitigation**:
-- §16.6 MCP server sandbox: `working_directory_allowlist` (default: project root +
+- MCP server sandbox: `working_directory_allowlist` (default: project root +
   `.compile-lens/`) + `path_denylist` (default: `~/.ssh/`, `~/.aws/`, `/etc/`)
 - all file reads are canonicalized and checked against the allowlist before open
 - escaping the allowlist returns a structured error
@@ -146,7 +145,7 @@ before the allowlist check.
 **Attacker**: a compromised or prompt-injected LLM agent.
 
 **Mitigation**:
-- §16.6 `tool_allowlist`: a hardcoded list of 8 read-only analysis tools. **No shell-exec,
+- `tool_allowlist`: a hardcoded list of 8 read-only analysis tools. **No shell-exec,
   no eval, no arbitrary file-write tool.**
 - adding a new MCP tool requires a source change + review (not runtime config)
 - the audit log records every tool call with an input-argument hash
@@ -163,7 +162,7 @@ fetches the source via `get_source_context` and is manipulated.
 **Attacker**: the author of the (possibly third-party) Python file under analysis.
 
 **Mitigation**:
-- §16.7 anti-hallucination: findings always carry `claim_type: fact | inferred | suggested`;
+- anti-hallucination: findings always carry `claim_type: fact | inferred | suggested`;
   the agent cannot promote `inferred` to `fact` without a link to the underlying data
 - source excerpts fetched over MCP are explicitly labeled in the `LlmBundle` metadata as
   "user-provided content, not trusted instructions"
@@ -197,7 +196,7 @@ Mitigation: documented warning.
 **Attacker**: anyone in transit + the tool maintainer.
 
 **Mitigation**:
-- §16.5 **no network egress by default**. No telemetry, no auto-update check, no usage stats.
+- **no network egress by default**. No telemetry, no auto-update check, no usage stats.
 - `cl telemetry on` is an explicit opt-in (post-adoption feature, if implemented). Only
   anonymized aggregates (e.g. "version X used N times") — no source, no paths, no IDs.
 
@@ -224,17 +223,17 @@ a malicious MCP call.
 
 ## 3. Threat-to-mitigation summary
 
-| Threat | Likelihood | Impact | Mitigation location in design.md |
+| Threat | Likelihood | Impact | Mitigation summary |
 |---|---|---|---|
-| T1. HTML report IP leak | High | High | §16.3 + §16.4 + `redaction_policy.md` |
-| T2. Path leakage | High | Medium | §16.3 path normalization |
-| T3. Secret in argv | Medium | High | §16.3 token-scrub regex |
-| T4. HTML XSS | Medium | High | §16.4 escape + CSP |
-| T5. MCP path traversal | Medium | Critical | §16.6 allowlist + canonicalize |
-| T6. MCP arbitrary exec | Low | Critical | §16.6 tool_allowlist + no shell tool |
-| T7. Prompt injection | Medium | Medium | §16.7 + audit replay |
+| T1. HTML report IP leak | High | High | default-strict redaction + `cl scrub` + `redaction_policy.md` |
+| T2. Path leakage | High | Medium | path normalization |
+| T3. Secret in argv | Medium | High | argv token-scrub regex |
+| T4. HTML XSS | Medium | High | HTML escape + CSP |
+| T5. MCP path traversal | Medium | Critical | working-directory allowlist + canonicalize |
+| T6. MCP arbitrary exec | Low | Critical | tool_allowlist + no shell tool |
+| T7. Prompt injection | Medium | Medium | claim-type labeling + audit replay |
 | T8. Legacy artifact | Medium | Medium | `cls-schema-migrate` default-strict |
-| T9. Telemetry leak | Low | Low | §16.5 no-egress default |
+| T9. Telemetry leak | Low | Low | no-egress default |
 | T10. Audit tampering | Low | Medium | Append-only + hash chain |
 
 ---
@@ -275,6 +274,6 @@ When an ADR changes a security-relevant decision:
 
 When a new attack class is reported:
 1. Add a new T# row with full STRIDE-style analysis
-2. Map it to a mitigation in `design.md` or `redaction_policy.md`
+2. Map it to a mitigation in this document or `redaction_policy.md`
 3. If there is no mitigation, it is a release blocker — add to the GitHub Security Advisory
    and patch first

@@ -1,4 +1,4 @@
-//! Residual classification for the compile-diff (Tool 2a, design §8.2.5 Phase 3).
+//! Residual classification for the compile-diff (Tool 2a, Phase 3).
 //!
 //! After anchoring and neighborhood expansion, some nodes are matched and some are not. This phase
 //! reads off the actual diff from that matching:

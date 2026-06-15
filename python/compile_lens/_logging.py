@@ -2,8 +2,7 @@
 
 The Rust binary configures `tracing` from `CLS_LOG` / `CLS_LOG_FORMAT`; the Python
 front-end mirrors the same surface here so a single set of environment knobs controls
-verbosity on both sides of the subprocess boundary (design.md §15.3 / discipline D9 —
-tracing + debug only; no metric export).
+verbosity on both sides of the subprocess boundary (tracing + debug only; no metric export).
 
 Environment variables read by :func:`configure_logging`:
 
