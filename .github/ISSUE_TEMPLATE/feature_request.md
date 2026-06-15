@@ -6,7 +6,7 @@ labels: ["enhancement", "triage"]
 ---
 
 <!--
-compile-lens has a sharply-defined scope (see the design doc "Not this"). It is *not*
+compile-lens has a sharply-defined scope. It is *not*
 a replacement compiler / fuzzer / correctness oracle, and it does not rewrite the
 official PyTorch tracing tools — it interprets their output. If the idea is outside
 that scope it will (politely) be closed; that is a feature of the project, not a slight.
@@ -18,7 +18,7 @@ that scope it will (politely) be closed; that is a feature of the project, not a
 
 ## Where in the toolkit does it live?
 
-<!-- Pick one or sketch a new tool. the design doc lists the existing tools. -->
+<!-- Pick one or sketch a new tool. The existing tools are listed below. -->
 
 - [ ] Tool 1 (recompile aggregator)
 - [ ] Tool 2 (compile diff)
@@ -36,4 +36,4 @@ that scope it will (politely) be closed; that is a feature of the project, not a
 
 ## Out of scope?
 
-<!-- Briefly check it against the design doc -->
+<!-- Briefly check it against the project's stated scope and non-goals. -->

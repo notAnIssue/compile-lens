@@ -1,5 +1,5 @@
 //! Tool 4 lint analyzer — join candidate lint findings with the correctness database and escalate
-//! severity (design notes).
+//! severity.
 //!
 //! The Python scanner (Layers 1 + 2) writes candidate findings into the artifact's `lint_findings`;
 //! this analyzer turns each into a real finding by looking its pattern up in the correctness

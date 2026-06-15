@@ -4,9 +4,8 @@ This is the Python *front-end* half of Tool 4 (``compile-lint``). It drives the 
 :class:`~compile_lens.collectors.lint.LintPatternScanner` over a file or a directory of ``.py``
 sources, turns each structural match into a candidate ``lint_findings[]`` entry, and writes a
 schema-valid ``.cls.json``. The Rust ``cl compile-lint <artifact>`` then joins those candidates with
-the correctness database, assigns severity from the user's torch version, and renders (the design doc
-ADR-006: the two halves meet on disk, not over FFI; unifying them into one command is the Phase 7
-hero).
+the correctness database, assigns severity from the user's torch version, and renders (the two
+halves meet on disk, not over FFI; unifying them into one command is the Phase 7 hero).
 
 **Layer-1 only.** Confirmation against a functionalized FX graph (Layer 2,
 :mod:`compile_lens.collectors.lint_graph`) needs the live function plus example inputs to trace,

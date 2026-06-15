@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-05-31
 - **Deciders**: project maintainer
-- **Related**: ADR-021 (schema layout); ADR-027 (unknown-field capture at growth points only); [`schema/v0.5.0.json`](../../schema/v0.5.0.json); `the design doc` §1.1 (release mapping) and §3 (Tool 1).
+- **Related**: ADR-021 (schema layout); ADR-027 (unknown-field capture at growth points only); [`schema/v0.5.0.json`](../../schema/v0.5.0.json); the release mapping and Tool 1.
 
 ## Context
 

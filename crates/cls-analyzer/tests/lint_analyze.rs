@@ -1,5 +1,5 @@
 //! Integration tests for the Tool 4 lint analyzer: join candidate findings with the correctness
-//! database and apply the severity-escalation rules (design notes).
+//! database and apply the severity-escalation rules.
 
 use cls_analyzer::lint::{analyze, render, Format};
 use cls_correctness_db::PatternDb;

@@ -18,8 +18,8 @@
 //!   expected to drive a schema change**.
 //!
 //! At that point ("public alpha"-style release) every subsequent schema bump ships a
-//! real per-version migration function. See the design doc D10 (with the pre-V1 exception
-//! noted in that section).
+//! real per-version migration function — the migration discipline (with the pre-V1
+//! exception of detect-and-refuse described above).
 
 use cls_errors::ClsError;
 use cls_schema::ClsArtifact;
