@@ -128,7 +128,7 @@ A detector that overstates its reach is worse than none. What this tool does *no
 
 - `kernel-roofline` (Tool 5) — the analytical roofline approach this cost model shares; Tool 5 ranks
   autotune configs, Tool 6 ranks fusion opportunities.
-- **CODA** — the GEMM-epilogue fusion technique this detector is modeled on (folding a row-wise
-  reduction's reciprocal through the downstream GEMM's epilogue).
+- **CODA** (Guo et al., arXiv:2605.19269) — the GEMM-epilogue fusion technique this detector is
+  modeled on (folding a row-wise reduction's reciprocal through the downstream GEMM's epilogue).
 - ADR-037 — why Tool 6 is a Rust analyzer over the serialized FX graph rather than a live-Python pass.
 - ADR-038 — how tensor shapes reach the cost model (the collector captures node output shapes).
