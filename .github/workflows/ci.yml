@@ -85,8 +85,11 @@ jobs:
         run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: cargo test --workspace
       - run: pytest python/tests
-      - name: cross-language round-trip
-        run: pytest tests/integration/test_schema_round_trip.py
+      # All integration suites: the cross-language round-trip plus the Tool 1/5/6 end-to-end
+      # pipelines (Python collector/capture -> Rust `cl` analyzer over the subprocess boundary).
+      # tool6 captures via torch.compile, so it needs the CPU torch installed above.
+      - name: integration (cross-language + Tool 1/5/6 end-to-end)
+        run: pytest tests/integration/
 
   determinism:
     name: Determinism (round-trip suite ×2)
