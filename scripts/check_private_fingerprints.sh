@@ -68,13 +68,13 @@ for file in "$@"; do
     failures=$((failures + 1))
   fi
 
-  # Pattern 3: references to the private planning design docs. `the design doc` and `the design notes`
+  # Pattern 3: references to the private planning design docs. `design.md` and `coda_feature.md`
   # are the maintainer's planning documents and are NOT in this repository; naming them — or citing
   # their internal sections as `design §<num>` — leaks the structure of private work. The `\b` keeps
   # the unrelated repo doc `sandbox_design.md` clear.
-  if grep -nE '\bdesign\.md|the design notes|\bdesign §[0-9]' "$file" >/dev/null 2>&1; then
-    echo "FAIL $file : reference to a private planning doc (the design doc / the design notes / 'design §N')"
-    grep -nE '\bdesign\.md|the design notes|\bdesign §[0-9]' "$file" | sed 's/^/    /'
+  if grep -nE '\bdesign\.md|coda_feature|\bdesign §[0-9]' "$file" >/dev/null 2>&1; then
+    echo "FAIL $file : reference to a private planning doc (design.md / coda_feature.md / 'design §N')"
+    grep -nE '\bdesign\.md|coda_feature|\bdesign §[0-9]' "$file" | sed 's/^/    /'
     failures=$((failures + 1))
   fi
 done

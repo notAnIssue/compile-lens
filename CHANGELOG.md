@@ -475,7 +475,7 @@ top of (Tool 1 recompile aggregator, Tool 2a compile diff, Hero `cl.session()`).
 - A GPU smoke CI job (no GPU runner; smoke tests live locally for now).
 - The nightly full matrix (no surface that would benefit from it pre-Phase 1).
 - A typed schema migration ladder (kept as detect-and-refuse until V1, per the
-  pre-V1 D10 exception in the design doc).
+  pre-V1 D10 exception).
 
 [Unreleased]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.3...HEAD
 [0.5.0-alpha.3]: https://github.com/notAnIssue/compile-lens/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
