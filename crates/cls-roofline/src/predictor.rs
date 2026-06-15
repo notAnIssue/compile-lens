@@ -1,4 +1,4 @@
-//! Layer 2 of the cost model: the empirical runtime predictor (design.md §8.5).
+//! Layer 2 of the cost model: the empirical runtime predictor (ADR-018).
 //!
 //! Layer 1's lower bound is the *ideal* floor; real kernels pay more. Layer 2 inflates it with four
 //! corrections into a predictor used for **ranking and pruning** (Layer 3), not for absolute
@@ -46,7 +46,7 @@ const WARP_SIZE: f64 = 32.0;
 /// without bound (an occupancy of ~0.33 already saturates it).
 const OCCUPANCY_PENALTY_MAX: f64 = 2.0;
 
-/// Per-launch overhead in microseconds (design.md §8.5: ~5 µs). A documented default until
+/// Per-launch overhead in microseconds (ADR-018: ~5 µs). A documented default until
 /// calibrated against real measurements.
 pub const LAUNCH_OVERHEAD_US: f64 = 5.0;
 
