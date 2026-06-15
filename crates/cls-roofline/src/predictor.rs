@@ -92,11 +92,15 @@ pub fn occupancy(block_size: Option<u64>, num_regs: Option<u64>) -> Option<f64> 
 }
 
 /// Occupancy penalty: the inverse-occupancy shortfall `(1/occ − 1)`, capped. Full occupancy → 0;
-/// unknown occupancy → 0 (no penalty rather than a guess).
+/// a *known-zero* occupancy (a kernel that can't fit even one block per SM — the worst case) → the
+/// max penalty; *unknown* occupancy (`None`) → 0 (no penalty rather than a guess). The known-zero
+/// and unknown cases are deliberately distinct: conflating them would give an unlaunchable kernel
+/// no penalty, the wrong sign.
 pub fn occupancy_penalty(occupancy: Option<f64>) -> f64 {
     match occupancy {
         Some(occ) if occ > 0.0 => (1.0 / occ - 1.0).min(OCCUPANCY_PENALTY_MAX),
-        _ => 0.0,
+        Some(_) => OCCUPANCY_PENALTY_MAX, // occ == 0: cannot launch a block — worst case, capped
+        None => 0.0,                      // unknown occupancy — no guess
     }
 }
 
@@ -204,6 +208,28 @@ mod tests {
         assert_eq!(occupancy_penalty(Some(1.0)), 0.0); // full occupancy, no penalty
         assert!((occupancy_penalty(Some(0.5)) - 1.0).abs() < 1e-9); // 1/0.5 - 1 = 1.0
         assert_eq!(occupancy_penalty(Some(0.1)), OCCUPANCY_PENALTY_MAX); // capped
+        assert_eq!(occupancy_penalty(None), 0.0);
+    }
+
+    /// A kernel that can't fit even one block per SM has occupancy 0 — the *worst* case. It must get
+    /// the maximum occupancy penalty, not be conflated with `None` (unknown → no penalty). Before
+    /// the fix the `occ > 0.0` guard fell through to 0.0, giving the unlaunchable kernel *no*
+    /// penalty (wrong-signed). (Audit R3.)
+    #[test]
+    fn occupancy_zero_unlaunchable_kernel_gets_max_penalty() {
+        // 256 regs/thread × 512 threads = 131072 regs/block > 65536 REGS_PER_SM → 0 blocks per SM.
+        let occ = occupancy(Some(512), Some(256));
+        assert_eq!(
+            occ,
+            Some(0.0),
+            "a kernel that cannot launch a block has occupancy 0"
+        );
+        assert_eq!(
+            occupancy_penalty(occ),
+            OCCUPANCY_PENALTY_MAX,
+            "occupancy 0 (unlaunchable) must get the max penalty, not 0"
+        );
+        // `None` (unknown occupancy) stays 0 — no guess, distinct from a known-zero occupancy.
         assert_eq!(occupancy_penalty(None), 0.0);
     }
 
