@@ -119,3 +119,24 @@ def test_unknown_field_survives_cross_language(tmp_path: Path) -> None:
     back = from_json(rust_out.read_text())
     assert (back.model_extra or {}).get("future_top_level") == {"x": 1}
     assert (back.session.model_extra or {}).get("gpu_arch") == "hopper"
+
+
+def test_nested_object_key_order_survives_cross_language(tmp_path: Path) -> None:
+    """A multi-key nested object at a growth point must keep its key ORDER through Python -> Rust.
+
+    Python's dict preserves insertion order; without serde_json's `preserve_order` the Rust side
+    would alphabetize nested objects (BTreeMap), silently drifting from Python. Keys are chosen NOT
+    in alphabetical order so the difference is observable.
+    """
+    data = json.loads((EXAMPLES / "minimal.cls.json").read_text())
+    data["future_options"] = {"zzz": 1, "aaa": 2, "mmm": 3}  # insertion order != alphabetical
+    py_out = tmp_path / "py.json"
+    py_out.write_text(json.dumps(data))
+    rust_out = tmp_path / "rust.json"
+    _rust_roundtrip(py_out, rust_out)
+
+    # Parse the Rust output preserving order (Python dict = parse order); the nested keys must stay.
+    rust_raw = json.loads(rust_out.read_text())
+    assert list(rust_raw["future_options"].keys()) == ["zzz", "aaa", "mmm"], (
+        f"Rust must preserve nested key order, got {list(rust_raw['future_options'].keys())}"
+    )

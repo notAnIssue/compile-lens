@@ -335,6 +335,31 @@ fn test_unknown_field_handled() {
     assert!(!reserialized.contains("future_break_field"));
 }
 
+// ── test_nested_object_key_order_preserved (round-trip determinism, D10) ──────────────────
+#[test]
+fn test_nested_object_key_order_preserved() {
+    // A multi-key object captured at a growth point must re-serialize with its keys in the SAME
+    // order (byte-identical round-trip, ADR-021 / D10). Without serde_json's `preserve_order`, a
+    // nested Value::Object uses a BTreeMap and alphabetizes — silently breaking the contract and
+    // drifting from the Python side, whose dict preserves insertion order. The keys here are
+    // deliberately NOT in alphabetical order.
+    let json = r#"{
+        "schema_version": "0.5.0",
+        "session": { "id": "x", "timestamp": "t", "torch_version": "2.6.0", "redaction_policy": "default-strict" },
+        "future_options": { "zzz": 1, "aaa": 2, "mmm": 3 }
+    }"#;
+    let artifact: ClsArtifact = serde_json::from_str(json).expect("unknown keys must not error");
+    let reserialized = serde_json::to_string(&artifact).expect("serializes");
+
+    let z = reserialized.find("zzz").expect("zzz present");
+    let a = reserialized.find("aaa").expect("aaa present");
+    let m = reserialized.find("mmm").expect("mmm present");
+    assert!(
+        z < a && a < m,
+        "nested object keys must keep insertion order (zzz, aaa, mmm), got:\n{reserialized}"
+    );
+}
+
 // ── extra: constructor + missing-required-field behavior ────────────────────────────────
 #[test]
 fn test_new_stamps_current_version() {
