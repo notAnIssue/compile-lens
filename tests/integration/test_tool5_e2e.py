@@ -4,8 +4,8 @@ Drives the analysis the way the autotune harness will: a committed `.cls.json` o
 (features + measured runtimes) is fed to the built `cl kernel-roofline` binary, which computes each
 config's roofline prediction (Layer 1 lower bound + Layer 2 empirical predictor) and, from the
 measured runtimes, a grid-level calibration and pruning decision (Layer 3). This exercises the same
-JSON-file + subprocess boundary the harness uses (`--format json`), per the design doc ADR-006 — the
-boundary is a file, not FFI.
+JSON-file + subprocess boundary the harness uses (`--format json`) — the boundary is a file,
+not FFI.
 
 The fixture is monotone by construction: block size shrinks / register pressure rises across the
 four configs so the predictor ranks them the same way the measured runtimes do, giving a perfect

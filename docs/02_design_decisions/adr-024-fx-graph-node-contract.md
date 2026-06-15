@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-06-09
 - **Deciders**: project maintainer
-- **Related**: ADR-021 (schema layout); ADR-027 (unknown-field capture at growth points only); ADR-029 (defer Tool 1 schema-field refinement to v0.6); ADR-032 (the `.cls.json` as a self-contained, queryable substrate); [`schema/v0.5.0.json`](../../schema/v0.5.0.json); `the design doc` §3 (Tool 2a — compile-diff).
+- **Related**: ADR-021 (schema layout); ADR-027 (unknown-field capture at growth points only); ADR-029 (defer Tool 1 schema-field refinement to v0.6); ADR-032 (the `.cls.json` as a self-contained, queryable substrate); [`schema/v0.5.0.json`](../../schema/v0.5.0.json); Tool 2a (compile-diff).
 
 ## Context
 

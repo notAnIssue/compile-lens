@@ -2,14 +2,14 @@
 //!
 //! This is the Rust-side entry point; the Python-side `cl` console script (a separate
 //! entry installed by the Python package) fronts the user-facing hero flow and invokes
-//! this binary as a subprocess (the design doc ADR-006 *Clarification*: control-flow crosses
-//! the language boundary via subprocess + file, not FFI).
+//! this binary as a subprocess (control-flow crosses the language boundary via
+//! subprocess + file, not FFI).
 //!
 //! For v0.5.0 the only wired subcommand is `collect`, kept minimal so the `cls-errors`
 //! rendering pipeline (miette + thiserror, ADR-022) is exercised end-to-end. The real
 //! collector lands in Phase 1.
 //!
-//! Observability (the design doc / D9 — tracing + debug only, no metric export) is
+//! Observability (tracing + debug only, no metric export) is
 //! configured by environment variables, *not* by CLI flags, so the surface stays the same
 //! for every subprocess invocation made by the Python front-end:
 //!

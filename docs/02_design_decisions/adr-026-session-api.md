@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-06-11
 - **Deciders**: project maintainer
-- **Related**: `the design doc` §9.2 (the hero form); P7 (the Python session is the source of truth, the CLI is a thin wrapper over it); ADR-022 (typed errors — an unknown probe name is a typed argument error, not a silent no-op).
+- **Related**: the hero form (the Python session is the source of truth, the CLI is a thin wrapper over it); ADR-022 (typed errors — an unknown probe name is a typed argument error, not a silent no-op).
 
 ## Context
 

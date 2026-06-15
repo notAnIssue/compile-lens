@@ -3,13 +3,13 @@
 - **Status**: Accepted
 - **Date**: 2026-06-12
 - **Deciders**: project maintainer
-- **Related**: ADR-021 (schema layout: normalized top-level arrays); ADR-032 (describe → attribute; pass-level attribution); ADR-027 (unknown-field capture at growth points only); ADR-029 (schema additions during alpha); [`schema/v0.5.0.json`](../../schema/v0.5.0.json); `the design doc` §8.3 (Tool 3).
+- **Related**: ADR-021 (schema layout: normalized top-level arrays); ADR-032 (describe → attribute; pass-level attribution); ADR-027 (unknown-field capture at growth points only); ADR-029 (schema additions during alpha); [`schema/v0.5.0.json`](../../schema/v0.5.0.json); Tool 3.
 
 ## Context
 
 Tool 3 produces two results at runtime — `DivergenceFindings` (first divergent layer, tolerances, layer count, `suggested_cause`) and `CausalAttribution` (which inductor pass, when disabled, removes the divergence). Until now these live only in memory; nothing persists them.
 
-The next steps need them on disk: a view-only CLI (`cl divergence-view <session.cls.json>`) that renders a prior session without re-running torch, and the hero report that folds divergence into a unified view. Both require Tool 3's results to be serialized into `.cls.json`. But the artifact's schema (`schema/v0.5.0.json` and the Rust `cls-schema` bindings) has no divergence section — `ClsArtifact` carries `graph_breaks`, `recompilations`, `compiled_graphs`, `compile_phases`, `iterations`, `lint_findings`, `kernels`, `roofline_predictions`, but nothing for divergence, and `the design doc` never specified its shape.
+The next steps need them on disk: a view-only CLI (`cl divergence-view <session.cls.json>`) that renders a prior session without re-running torch, and the hero report that folds divergence into a unified view. Both require Tool 3's results to be serialized into `.cls.json`. But the artifact's schema (`schema/v0.5.0.json` and the Rust `cls-schema` bindings) has no divergence section — `ClsArtifact` carries `graph_breaks`, `recompilations`, `compiled_graphs`, `compile_phases`, `iterations`, `lint_findings`, `kernels`, `roofline_predictions`, but nothing for divergence, and its shape had never been specified.
 
 `.cls.json` is the *sole* cross-language contract (Python writes, Rust reads; the file on disk is the API). Getting a contract field wrong is expensive: both ends must change in lockstep, so this is settled schema-first — lock the contract in this change, then conform the Python producer and the Rust reader in later ones.
 

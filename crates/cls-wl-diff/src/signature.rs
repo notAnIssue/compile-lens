@@ -1,4 +1,4 @@
-//! WL-signature computation for the compile-diff (Tool 2a, design notes).
+//! WL-signature computation for the compile-diff (Tool 2a).
 //!
 //! To diff two compiled graphs we cannot match nodes by id — ids are unstable across compiles.
 //! Instead each node gets a **structural signature**: a hash of what the node *is* and what it is

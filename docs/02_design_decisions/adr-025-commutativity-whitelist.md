@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-06-10
 - **Deciders**: project maintainer
-- **Related**: ADR-024 (FX-graph node contract — the ordered `inputs` this policy interprets); `the design doc` §8.2.5 (WL-signature diff); D4 (the diff is a pure function with no torch dependency).
+- **Related**: ADR-024 (FX-graph node contract — the ordered `inputs` this policy interprets); the WL-signature diff (the diff is a pure function with no torch dependency).
 
 ## Context
 

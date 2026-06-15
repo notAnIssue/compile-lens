@@ -12,9 +12,9 @@ do not open a public issue or PR.
 
 Every artifact that travels with this repository — PR titles, commit messages,
 branches, code comments, docs, ADRs — refers to a unit of work by an
-identifier that **`the design doc` or an ADR already establishes**:
+identifier that **the public design docs or an ADR already establish**:
 
-- A **Tool** by its number and name from `the design doc` §3 (*Tool 1 — recompile aggregator*).
+- A **Tool** by its number and name (*Tool 1 — recompile aggregator*).
 - A **crate** by its cargo name (`cls-schema`, `cls-errors`, `cls-cli`, …).
 - An **engineering discipline** by its design-doc tag (*D7 algorithm*, *D8 error UX*, …, *D11 security*).
 - An **architectural decision** by its ADR number (*ADR-021*, *ADR-022*, *ADR-027*).

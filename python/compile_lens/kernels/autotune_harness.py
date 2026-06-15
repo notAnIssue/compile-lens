@@ -7,8 +7,8 @@ predicted top-K — so a 24-config grid can cost a handful of measurements inste
 
 The cost model itself lives once, in Rust (`cls-roofline`). The harness drives it out of process:
 it writes the configs to a `.cls.json` and shells out to `cl kernel-roofline --format json`
-(the design doc ADR-006 — Python↔Rust exchange is a JSON file over a subprocess, never an in-process
-binding). Spearman correlation and the prune-tier thresholds stay in Rust too; the harness reads the
+(Python↔Rust exchange is a JSON file over a subprocess, never an in-process binding). Spearman
+correlation and the prune-tier thresholds stay in Rust too; the harness reads the
 tier back and only *applies* it to the grid. So the harness is pure orchestration.
 
 The two GPU-touching steps are injected as callbacks so the orchestration is testable without a GPU:

@@ -12,9 +12,9 @@
 ## Context
 
 `.cls.json` is the **sole cross-language contract** between the Python collectors and the
-Rust analyzers — no PyO3, no IPC, only a file on disk (the design doc). The schema sets
-`additionalProperties: true` at **every** level, and D6 (collector generosity) plus
-the design doc establish that the field set only grows — especially session metadata
+Rust analyzers — no PyO3, no IPC, only a file on disk. The schema sets
+`additionalProperties: true` at **every** level, and collector generosity plus the
+forward-compatibility contract establish that the field set only grows — especially session metadata
 (`gpu_arch`, `driver_version`, `nccl_version`, …) and the top-level structure (new record
 arrays). A deployed binding will therefore routinely meet keys its struct/model does not
 declare.
@@ -102,4 +102,4 @@ contribution = `weight × (raw/10)`.
 (growth-point fidelity + cross-language consistency = 5.5 / 10 of the weight). A buys maximal
 fidelity at ruinous boilerplate and speculative retention; B is simplest but fails the core
 forward-compat need. The result would flip to B only if session / top-level were *not*
-expected to grow — but D6 and the design doc state explicitly that they do.
+expected to grow — but collector generosity and the forward-compatibility contract state explicitly that they do.

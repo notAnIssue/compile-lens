@@ -3,7 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-06-12
 - **Deciders**: project maintainer
-- **Related**: ADR-013 (the four mandatory items per pattern); ADR-032 (Tool 4 two-layer lint); `the design doc` §8.4 (Tool 4); the `cls-correctness-db` crate.
+- **Related**: ADR-013 (the four mandatory items per pattern); ADR-032 (Tool 4 two-layer lint); Tool 4; the `cls-correctness-db` crate.
 
 ## Context
 
