@@ -10,7 +10,9 @@ rust-version = "1.80"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# preserve_order: nested Value::Object keeps insertion order (IndexMap, not BTreeMap), so a
+# round-trip is byte-identical and does not drift from Python's insertion-ordered dict (D10).
+serde_json = { version = "1", features = ["preserve_order"] }
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
