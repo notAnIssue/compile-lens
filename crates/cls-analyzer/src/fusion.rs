@@ -447,9 +447,16 @@ fn pattern_name(pattern_id: &str) -> &str {
     }
 }
 
-/// Bytes as whole megabytes (MB = 10⁶ B, matching the design note's worked example).
-fn mb(bytes: f64) -> u64 {
-    (bytes / 1_000_000.0).round() as u64
+/// Format bytes as megabytes (MB = 10⁶ B). Whole MB at model scale (matching the design note's
+/// worked example, e.g. `1757 MB`); two decimals below 1 MB so a small graph reads `0.21 MB`
+/// rather than a misleading `0 MB`.
+fn fmt_mb(bytes: f64) -> String {
+    let mb = bytes / 1_000_000.0;
+    if mb >= 1.0 {
+        format!("{} MB", mb.round() as u64)
+    } else {
+        format!("{mb:.2} MB")
+    }
 }
 
 fn render_markdown(ranked: &[&FusionOpportunity]) -> String {
@@ -495,8 +502,8 @@ fn render_markdown(ranked: &[&FusionOpportunity]) -> String {
             opp.estimated_speedup,
         ) {
             (Some(baseline), Some(fused), Some(speedup)) => {
-                let _ = writeln!(out, "- Baseline HBM traffic: {} MB", mb(baseline));
-                let _ = writeln!(out, "- CODA-fused HBM traffic: {} MB", mb(fused));
+                let _ = writeln!(out, "- Baseline HBM traffic: {}", fmt_mb(baseline));
+                let _ = writeln!(out, "- CODA-fused HBM traffic: {}", fmt_mb(fused));
                 let _ = writeln!(
                     out,
                     "- Estimated speedup: ~{speedup:.2}× (memory-bound upper bound — ranks \
@@ -1004,6 +1011,23 @@ mod tests {
         opp.confidence = Some("medium".to_string());
         let md = render(&[opp], Format::Markdown);
         assert!(md.contains("Confidence: medium"));
+    }
+
+    #[test]
+    fn render_small_graph_shows_sub_mb_not_zero() {
+        // A toy graph's traffic is well under 1 MB; it must read as decimals (0.21 MB), never a
+        // misleading "0 MB" (surfaced by the Tool 6 end-to-end validation on a tiny capture).
+        let mut opp = canonical_opp();
+        opp.baseline_hbm_bytes = Some(212_992.0);
+        opp.fused_hbm_bytes = Some(131_584.0);
+        opp.estimated_speedup = Some(1.62);
+        let md = render(&[opp], Format::Markdown);
+        assert!(md.contains("Baseline HBM traffic: 0.21 MB"), "md:\n{md}");
+        assert!(md.contains("CODA-fused HBM traffic: 0.13 MB"), "md:\n{md}");
+        assert!(
+            !md.contains(" 0 MB"),
+            "sub-MB must not round to a misleading 0 MB:\n{md}"
+        );
     }
 
     fn with_speedup(s: Option<f64>) -> FusionOpportunity {
