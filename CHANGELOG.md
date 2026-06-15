@@ -7,21 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The fusion detector (Tool 6) is now usable from the CLI: `cl fusion-detect <session.cls.json>`
-matches CODA-style `GEMM-Residual-RMSNorm-GEMM` opportunities in a collected session's FX graph and
-reports them — pattern, FX-node location, shape, baseline-vs-fused HBM traffic, estimated speedup,
-and a suggested epilogue kernel — ranked by speedup, as `--format markdown|json`, with `--min-speedup`
-and `--top-k` to trim the report. It is **suggest-only and read-only**: it reads the serialized graph
-the collector already wrote, never mutates it, never runs a kernel, and needs no torch; speedups are
-analytical memory-bound upper bounds for ranking, not measured numbers.
-
-Underneath, the detector now estimates HBM traffic end-to-end. The FX collector captures each node's
-output shape and dtype (read from `node.meta['val']`) as typed `FxNode` fields, and the analyzer
-derives each matched pattern's GEMM dimensions (M/N/K0/K1/dtype) and runs the cost model — so a
-`FusionOpportunity` carries its baseline-vs-fused HBM byte traffic and estimated speedup, not just its
-location and suggested kernel. Shape capture is best-effort and additive: a graph written before this
-existed, or one with a dynamic (symbolic) shape, leaves the cost unset rather than guessing it
-(ADR-038).
+Tool 6 (`fusion-detect`) complete: a CODA-style algebraic fusion-opportunity detector for
+`torch.compile` graphs. It finds the `GEMM-Residual-RMSNorm-GEMM` pattern Inductor leaves unfused —
+the per-row `1/rms` scalar can be folded through the second GEMM's epilogue so the RMSNorm never
+materializes to HBM — matching both a native `aten.rms_norm` and the decomposed
+`pow→mean→rsqrt→mul` subgraph that real models lower to. It is a Rust analyzer over the serialized FX
+graph (ADR-037), bounded by three disciplines: forward-only (training graphs are never analyzed),
+torch-concrete matchers (extending it means adding a matcher, not a rewrite DSL), and an analytical
+HBM-traffic roofline whose speedup is a memory-bound **upper bound for ranking, not a measured
+number** (real is ~1.05–1.15× on LLaMA shapes). The FX collector captures node output shapes/dtypes
+(ADR-038) so the cost model runs end-to-end; a dynamic (symbolic) shape leaves the cost unset rather
+than guessed. Exposed as `cl fusion-detect <session.cls.json>` (`--format markdown|json`,
+`--min-speedup`, `--top-k`), ranked by speedup — **suggest-only and read-only**: it reads the graph,
+never mutates it, never runs a kernel, and names an `epilogue_kit.ops.*` kernel by string only (the
+seam to apply the fusion). Based on the CODA fusion technique (Guo et al., arXiv:2605.19269).
 
 Tool 5 (`kernel-roofline`) complete: a roofline-pruned autotune filter for Triton kernels. A
 three-layer cost model — a Williams theoretical lower bound, an empirical predictor (four
