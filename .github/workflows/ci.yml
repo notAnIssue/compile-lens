@@ -79,6 +79,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: pip install -e ".[dev]"
+      # CPU torch so the torch-gated runtime-layer tests actually run here instead of skipping
+      # (Tool 3 divergence, Layer-2 lint, artifact capture). pip cache (above) amortizes the wheel.
+      - name: install CPU torch (runtime-layer tests)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: cargo test --workspace
       - run: pytest python/tests
       - name: cross-language round-trip
