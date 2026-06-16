@@ -46,6 +46,8 @@ pub fn esc(s: &str) -> String {
 fn document(session: &Session, sections: &str) -> String {
     format!(
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
+         <meta http-equiv=\"Content-Security-Policy\" \
+         content=\"default-src 'none'; style-src 'unsafe-inline'\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
          <title>compile-lens session report</title>\n<style>{CSS}</style>\n</head>\n\
          <body>\n<header>\n<h1>compile-lens session report</h1>\n\
