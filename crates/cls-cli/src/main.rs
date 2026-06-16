@@ -224,6 +224,26 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+
+    /// Hero report. `cl session report <session.cls.json>` renders a collected session into the
+    /// self-contained HTML report (Phase 7, the source of truth is the Python `cl.session()`).
+    Session {
+        #[command(subcommand)]
+        action: SessionCommand,
+    },
+}
+
+/// Subcommands under `cl session`.
+#[derive(Subcommand)]
+enum SessionCommand {
+    /// Render a session's `.cls.json` into the self-contained HTML report.
+    Report {
+        /// The `.cls.json` artifact to render.
+        session: std::path::PathBuf,
+        /// Where to write the HTML. Defaults to stdout.
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<std::path::PathBuf>,
+    },
 }
 
 /// Redaction-policy level for `cl collect --redaction`. Mirrors the schema's
@@ -373,8 +393,35 @@ fn run(cli: Cli) -> Result<(), ClsError> {
             dry_run,
         }) => migrate(input, output, dry_run),
 
+        Some(Command::Session { action }) => match action {
+            SessionCommand::Report { session, output } => session_report(session, output),
+        },
+
         None => Ok(()),
     }
+}
+
+/// `cl session report` — render a collected session into the self-contained HTML report (Phase 7).
+/// Reads + version-gates the artifact (the shared loader), renders via `cls-report`, and writes the
+/// HTML to `--output` or stdout. Pure Rust: the Python `cl.session()` controls collection; this
+/// renders what it wrote, the data crossing as the `.cls.json` file (ADR-006), never FFI.
+fn session_report(
+    session: std::path::PathBuf,
+    output: Option<std::path::PathBuf>,
+) -> Result<(), ClsError> {
+    let artifact = cls_schema_migrate::load_artifact(&session)?;
+    let html = cls_report::render(&artifact);
+    match output {
+        Some(path) => {
+            std::fs::write(&path, html).map_err(|source| ClsError::IoError {
+                path: path.display().to_string(),
+                source,
+            })?;
+            println!("wrote {}", path.display());
+        }
+        None => print!("{html}"),
+    }
+    Ok(())
 }
 
 /// `cl collect` skeleton. Validates the mode and the input path; the
