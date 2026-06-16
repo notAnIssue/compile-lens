@@ -6,10 +6,11 @@
 //! **fresh HTML** from the structured findings (not the markdown renderers), so every
 //! user-controlled string is escaped with [`esc`] at the point it enters the document.
 //!
-//! This change renders three sections — session metadata, the recompile summary, and a
-//! raw-artifacts footer. The remaining tool sections (diff / cache-stability / divergence / lint /
-//! roofline / fusion) and the security hardening (an `ammonia` allowlist + an XSS payload corpus +
-//! a CSP header + a URL allowlist) land in later changes.
+//! Sections so far: session metadata, recompile summary, divergence (eager vs compiled, surfacing a
+//! NaN `max_abs_diff` as the headline signal per ADR-039), fusion opportunities (CODA crown-jewel),
+//! and a raw-artifacts footer. The remaining tool sections (compile-diff / cache-stability / lint /
+//! roofline) and the security hardening (an `ammonia` allowlist + an XSS payload corpus + a CSP
+//! header + a URL allowlist) land in later changes.
 
 use cls_schema::{ClsArtifact, Session};
 
@@ -18,6 +19,8 @@ pub fn render(artifact: &ClsArtifact) -> String {
     let mut sections = String::new();
     sections.push_str(&metadata_section(&artifact.session));
     sections.push_str(&recompile_section(artifact));
+    sections.push_str(&divergence_section(artifact));
+    sections.push_str(&fusion_section(artifact));
     sections.push_str(&raw_section(artifact));
     document(&artifact.session, &sections)
 }
@@ -155,6 +158,90 @@ fn recompile_section(artifact: &ClsArtifact) -> String {
         body.push_str("</ol>\n");
     }
     section("recompile", "Recompile summary", &body)
+}
+
+fn divergence_section(artifact: &ClsArtifact) -> String {
+    if artifact.divergences.is_empty() {
+        return section(
+            "divergence",
+            "Divergence (eager vs compiled)",
+            "<p class=\"muted\">No divergence findings recorded.</p>",
+        );
+    }
+    let mut body = String::from(
+        "<table>\n<thead><tr><th>first divergent layer</th><th>max abs diff</th>\
+         <th>layers compared</th><th>attributed cause</th></tr></thead>\n<tbody>\n",
+    );
+    for d in &artifact.divergences {
+        // max_abs_diff = NaN is the headline signal: the compiled model produced NaN (ADR-039).
+        let max_diff = match d.max_abs_diff {
+            Some(v) if v.is_nan() => "<strong>NaN</strong> — compiled output is NaN".to_string(),
+            Some(v) if v.is_infinite() => "∞".to_string(),
+            Some(v) => format!("{v:.3e}"),
+            None => "—".to_string(),
+        };
+        body.push_str(&format!(
+            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+            esc(d
+                .first_divergent_layer
+                .as_deref()
+                .unwrap_or("(none — within tolerance)")),
+            max_diff,
+            d.num_layers_compared,
+            esc(d.suggested_cause.as_deref().unwrap_or("—")),
+        ));
+    }
+    body.push_str("</tbody>\n</table>\n");
+    section("divergence", "Divergence (eager vs compiled)", &body)
+}
+
+/// Render an optional `u64` dimension, `?` when absent.
+fn dim(v: Option<u64>) -> String {
+    v.map(|n| n.to_string()).unwrap_or_else(|| "?".to_string())
+}
+
+fn fusion_section(artifact: &ClsArtifact) -> String {
+    if artifact.fusion_opportunities.is_empty() {
+        return section(
+            "fusion",
+            "Fusion opportunities (CODA)",
+            "<p class=\"muted\">No algebraic fusion opportunities found.</p>",
+        );
+    }
+    let mut body = String::from(
+        "<p class=\"muted\">Analytical HBM-traffic roofline (memory-bound upper bound, not \
+         measured); suggest-only.</p>\n\
+         <table>\n<thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th>\
+         <th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested kernel</th>\
+         </tr></thead>\n<tbody>\n",
+    );
+    for f in &artifact.fusion_opportunities {
+        let shape = f.shape.as_ref().map_or_else(
+            || "—".to_string(),
+            |s| format!("{}×{}×{}×{}", dim(s.m), dim(s.n), dim(s.k0), dim(s.k1),),
+        );
+        let hbm = format!(
+            "{} → {}",
+            f.baseline_hbm_bytes
+                .map_or_else(|| "?".to_string(), |b| format!("{b:.3e}")),
+            f.fused_hbm_bytes
+                .map_or_else(|| "?".to_string(), |b| format!("{b:.3e}")),
+        );
+        let speedup = f
+            .estimated_speedup
+            .map_or_else(|| "—".to_string(), |s| format!("{s:.2}×"));
+        body.push_str(&format!(
+            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><strong>{}</strong></td>\
+             <td><code>{}</code></td></tr>\n",
+            esc(&f.pattern_id),
+            esc(&shape),
+            esc(&hbm),
+            esc(&speedup),
+            esc(f.suggested_kernel.as_deref().unwrap_or("—")),
+        ));
+    }
+    body.push_str("</tbody>\n</table>\n");
+    section("fusion", "Fusion opportunities (CODA)", &body)
 }
 
 fn raw_section(artifact: &ClsArtifact) -> String {
