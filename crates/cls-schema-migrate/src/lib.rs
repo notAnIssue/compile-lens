@@ -34,15 +34,21 @@ pub const CURRENT_VERSION: &str = cls_schema::SCHEMA_VERSION;
 /// it matches [`CURRENT_VERSION`]. Returns the version string on success, or
 /// [`ClsError::SchemaVersionMismatch`] when it does not (pre-V1: the user re-collects).
 ///
-/// Cheap on purpose — does not deserialize the whole artifact, so it works even on
-/// foreign artifacts the binary cannot model.
+/// Cheap on purpose — parses only to a generic `serde_json::Value` to read one field, not into the
+/// typed [`ClsArtifact`] model, so it works even on foreign artifacts the binary cannot model.
 pub fn detect_schema_version(path: &Path) -> Result<String, ClsError> {
     let text = std::fs::read_to_string(path).map_err(|source| ClsError::IoError {
         path: path.display().to_string(),
         source,
     })?;
+    verify_schema_version(&text)
+}
+
+/// Version-gate an already-read artifact body. Shared by [`detect_schema_version`] and
+/// [`load_artifact`] so each reads the file once rather than re-reading it per check.
+fn verify_schema_version(text: &str) -> Result<String, ClsError> {
     let value: serde_json::Value =
-        serde_json::from_str(&text).map_err(|source| ClsError::SchemaParseError { source })?;
+        serde_json::from_str(text).map_err(|source| ClsError::SchemaParseError { source })?;
     let version = value
         .get("schema_version")
         .and_then(|v| v.as_str())
@@ -96,10 +102,12 @@ pub fn migrate_to_current(input_path: &Path, output_path: &Path) -> Result<(), C
 /// [`ClsError::SchemaVersionMismatch`] / `CLS-E0003` rather than a noisy serde error) and
 /// then parse into [`ClsArtifact`].
 pub fn load_artifact(path: &Path) -> Result<ClsArtifact, ClsError> {
-    detect_schema_version(path)?;
+    // Read once, then version-gate and deserialize the same text (previously `detect_schema_version`
+    // read the file and this function read it again — two reads of one path).
     let text = std::fs::read_to_string(path).map_err(|source| ClsError::IoError {
         path: path.display().to_string(),
         source,
     })?;
+    verify_schema_version(&text)?;
     serde_json::from_str(&text).map_err(|source| ClsError::SchemaParseError { source })
 }

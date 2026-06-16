@@ -272,9 +272,11 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
 ///
 /// Reading the dims off the two matched GEMMs and GEMM1's activation input:
 /// GEMM1 output is `[…, M, N]`, GEMM2 output is `[…, M, K1]`, and `K0` is GEMM1's contraction dim —
-/// the trailing dim of its `[…, M, K0]` activation operand, found as the input whose leading-dim
-/// product equals `M` (the weight `[K0, N]` and the `[N]` bias don't match, so the activation is
-/// picked unambiguously). The dtype is taken from GEMM1's output.
+/// the trailing dim of its `[…, M, K0]` activation operand, found as the **first** input whose
+/// leading-dim product equals `M`. The `[N]` bias never matches; the weight `[K0, N]` matches only
+/// in a **square contraction** (`K0 == M`), and there disambiguation relies on the activation
+/// preceding the weight in the operand order — the convention torch's `mm`/`addmm` emit (the
+/// activation is the first matrix operand). The dtype is taken from GEMM1's output.
 fn derive_shape(by_id: &HashMap<&str, &FxNode>, m: &PatternAMatch) -> Option<(Shape, String)> {
     let g1 = by_id.get(m.gemm1.as_str())?;
     let g2 = by_id.get(m.gemm2.as_str())?;
@@ -353,7 +355,9 @@ pub fn baseline_hbm_bytes(shape: &Shape, dtype_bytes: u64) -> u64 {
 pub fn coda_hbm_bytes(shape: &Shape, dtype_bytes: u64, tile_n: u64) -> u64 {
     let gemm_fixed = gemm_fixed_elems(shape);
     let activations = 3 * shape.m * shape.n;
-    let tiles = (shape.n / tile_n.max(1)).max(1);
+    // div_ceil, not floor: a final partial tile (n not a multiple of tile_n) still writes its own
+    // partial statistics, so it counts toward the fp32 traffic below.
+    let tiles = shape.n.div_ceil(tile_n.max(1)).max(1);
     // fp32 (4 bytes): partial stats written by A and read by aux; r written by aux and read by C.
     let fp32 = 4 * (2 * shape.m * tiles + 2 * shape.m);
     (gemm_fixed + activations) * dtype_bytes + fp32
@@ -552,6 +556,62 @@ mod tests {
             n("rms", "aten.rms_norm", &["add", "gamma"]),
             n("g2", "aten.mm", &["rms", "w1"]),
         ]
+    }
+
+    #[test]
+    fn derive_shape_square_contraction_picks_activation_by_operand_order() {
+        // Square contraction M == K0 == 512: the weight [K0, N] = [512, 256] also has leading dim
+        // == M, so it matches the row filter too. derive_shape must still report K0 = 512 (the
+        // activation's trailing dim), not the weight's N = 256 — it relies on the activation
+        // preceding the weight in g1.inputs (torch mm/addmm operand order).
+        let mut x = n("x", "placeholder", &[]);
+        x.out_shape = vec![512, 512]; // activation [M, K0]
+        let mut w0 = n("w0", "placeholder", &[]);
+        w0.out_shape = vec![512, 256]; // weight [K0, N] — rows == M in the square case
+        let mut bias = n("bias", "placeholder", &[]);
+        bias.out_shape = vec![256];
+        let mut g1 = n("g1", "aten.addmm", &["x", "w0", "bias"]); // activation first
+        g1.out_shape = vec![512, 256]; // [M, N]
+        g1.out_dtype = Some("bfloat16".to_string());
+        let mut g2 = n("g2", "aten.mm", &["rms", "w1"]);
+        g2.out_shape = vec![512, 128]; // [M, K1]
+        let nodes = [x, w0, bias, g1, g2];
+        let by_id: HashMap<&str, &FxNode> = nodes.iter().map(|nd| (nd.id.as_str(), nd)).collect();
+        let m = PatternAMatch {
+            gemm1: "g1".into(),
+            add: "add".into(),
+            rms_norm_ids: vec!["rms".into()],
+            gemm2: "g2".into(),
+            decomposed: false,
+        };
+
+        let (shape, dtype) = derive_shape(&by_id, &m).expect("shape derives");
+        assert_eq!((shape.m, shape.n, shape.k1), (512, 256, 128));
+        assert_eq!(
+            shape.k0, 512,
+            "must pick activation K0 (512), not weight N (256)"
+        );
+        assert_eq!(dtype, "bfloat16");
+    }
+
+    #[test]
+    fn coda_counts_a_partial_final_tile() {
+        // n = 130 over tile_n = 128 is two tiles (one full + one partial); the partial tile still
+        // writes its own partial statistics. Floor division would miscount it as one tile.
+        let shape = Shape {
+            m: 8,
+            n: 130,
+            k0: 64,
+            k1: 64,
+        };
+        let two_tiles = coda_hbm_bytes(&shape, 2, 128); // div_ceil(130, 128) = 2
+        let one_tile = coda_hbm_bytes(&shape, 2, 130); // div_ceil(130, 130) = 1
+        assert!(
+            two_tiles > one_tile,
+            "the partial 2nd tile must add fp32 stat traffic"
+        );
+        // The only difference is one tile's worth of fp32 partial-stats: 4 bytes * 2 * m.
+        assert_eq!(two_tiles - one_tile, 4 * 2 * shape.m);
     }
 
     #[test]

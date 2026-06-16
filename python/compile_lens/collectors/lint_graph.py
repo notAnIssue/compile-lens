@@ -15,7 +15,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import structlog
+
 from compile_lens.collectors.lint import LintHit
+
+_log = structlog.get_logger("compile_lens.collectors.lint_graph")
 
 
 def graph_confirms_input_mutation(fn: Any, inputs: tuple[Any, ...]) -> bool:
@@ -62,9 +66,12 @@ def confirm(hits: list[LintHit], fn: Any, inputs: tuple[Any, ...] | None) -> lis
         return hits
     try:
         mutates = graph_confirms_input_mutation(fn, inputs)
-    except Exception:
-        # Untraceable function: we can neither confirm nor refute, so keep the candidates rather
-        # than silently drop a possibly-real finding.
+    except Exception as exc:
+        # An untraceable function: we can neither confirm nor refute, so keep the candidates rather
+        # than silently drop a possibly-real finding. The catch stays broad (FX tracing fails many
+        # ways), but log it — so a genuine Layer-2 breakage (a bug in the trace path) surfaces
+        # instead of masquerading as a clean "no candidates the graph backs".
+        _log.warning("lint_graph.trace_failed", error=str(exc))
         return hits
     if mutates:
         return hits

@@ -7,7 +7,9 @@
 //! id, a `level`, a message, and a physical source location.
 //!
 //! Severity maps to the SARIF level Code Scanning understands: `high`/`critical` → `error`,
-//! `medium`/`low` → `warning`, everything else (e.g. `info`) → `note`.
+//! `medium`/`low` → `warning`, everything else (e.g. `info`) → `note`. compile-lint — the only
+//! producer today — emits a binary `high`/`info`, so in practice only `error` and `note` appear;
+//! the other arms are a defensive total mapping for any severity an analyzer might add later.
 
 use std::collections::HashSet;
 
