@@ -29,13 +29,44 @@ Representation conventions (mirroring the Rust side):
 
 from __future__ import annotations
 
+import math
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer
 
 #: Schema version these models mirror.
 SCHEMA_VERSION: str = "0.5.0"
+
+
+def _decode_non_finite(value: Any) -> Any:
+    """Read side: map the JSON string sentinels back to floats; pass numbers through. (pydantic also
+    coerces these by default; doing it explicitly keeps the contract symmetric with the writer and
+    with the Rust adapter, and lets any *other* string be rejected rather than silently coerced.)"""
+    if isinstance(value, str):
+        return {"NaN": math.nan, "Infinity": math.inf, "-Infinity": -math.inf}.get(value, value)
+    return value
+
+
+def _encode_non_finite(value: float) -> float | str:
+    """Write side: a non-finite float becomes an explicit string sentinel; a finite one stays a
+    JSON number."""
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
+
+
+#: A ``float`` that encodes non-finite values (NaN, ±∞) as the explicit JSON string sentinels
+#: ``"NaN"`` / ``"Infinity"`` / ``"-Infinity"`` instead of the silent ``null`` both serializers
+#: default to — so a NaN survives the Python→Rust round trip and stays distinct from "not computed".
+#: Applied to every nullable float that holds a computed or measured value. See ADR-039.
+NonFiniteFloat = Annotated[
+    float,
+    BeforeValidator(_decode_non_finite),
+    PlainSerializer(_encode_non_finite, return_type=float | str, when_used="json"),
+]
 
 
 class _Model(BaseModel):
@@ -109,7 +140,7 @@ class Recompilation(_Model):
     trigger_reason: str | None = None
     failed_guard: FailedGuard | None = None
     occurred_at_step: int | None = None
-    wall_clock_ms: float | None = None
+    wall_clock_ms: NonFiniteFloat | None = None
 
 
 class FxNode(_Model):
@@ -148,12 +179,12 @@ class CompiledGraph(_Model):
 
 class CompilePhase(_Model):
     name: str
-    duration_ms: float | None = None
+    duration_ms: NonFiniteFloat | None = None
 
 
 class Iteration(_Model):
     iteration_index: int
-    timestamp_ms: float | None = None
+    timestamp_ms: NonFiniteFloat | None = None
     guard_evaluations: list[GuardEvaluation] = Field(default_factory=list)
     cache_hit: bool | None = None
     recompilation_triggered: bool | None = None
@@ -194,7 +225,7 @@ class Divergence(_Model):
 
     divergence_id: str
     first_divergent_layer: str | None = None
-    max_abs_diff: float | None = None
+    max_abs_diff: NonFiniteFloat | None = None
     num_layers_compared: int
     rtol: float
     atol: float
@@ -212,9 +243,9 @@ class LaunchConfig(_Model):
 
 
 class KernelFeatures(_Model):
-    flops: float | None = None  # schema `number` -> float (arrives as 1.2e10 etc.)
-    bytes_loaded: float | None = None
-    bytes_stored: float | None = None
+    flops: NonFiniteFloat | None = None  # schema `number` -> float (arrives as 1.2e10 etc.)
+    bytes_loaded: NonFiniteFloat | None = None
+    bytes_stored: NonFiniteFloat | None = None
     block_size: int | None = None
     num_regs: int | None = None  # register pressure proxy (Tool 5 4th correction)
     n_spills: int | None = None
@@ -222,9 +253,9 @@ class KernelFeatures(_Model):
 
 class KernelMeasurements(_Model):
     iterations: int | None = None
-    mean_us: float | None = None
-    median_us: float | None = None
-    p99_us: float | None = None
+    mean_us: NonFiniteFloat | None = None
+    median_us: NonFiniteFloat | None = None
+    p99_us: NonFiniteFloat | None = None
     source: str | None = None  # plain str ("proton"/"self_timed"); forward-compat
 
 
@@ -235,7 +266,7 @@ class Kernel(_Model):
     ptx_path: str | None = None
     kernel_source_excerpt: str | None = None  # opt-in only
     launch_config: LaunchConfig | None = None
-    occupancy_hint: float | None = None
+    occupancy_hint: NonFiniteFloat | None = None
     features: KernelFeatures | None = None
     measurements: KernelMeasurements | None = None
     autotune_history: list[dict[str, Any]] = Field(default_factory=list)
@@ -243,22 +274,22 @@ class Kernel(_Model):
 
 class GpuSpec(_Model):
     name: str | None = None
-    peak_compute_tflops_bf16: float | None = None
-    peak_bw_gbps: float | None = None
-    l2_cache_mb: float | None = None
+    peak_compute_tflops_bf16: NonFiniteFloat | None = None
+    peak_bw_gbps: NonFiniteFloat | None = None
+    l2_cache_mb: NonFiniteFloat | None = None
     sm_count: int | None = None
 
 
 class Calibration(_Model):
-    pearson_correlation: float | None = None  # float (may be negative)
-    spearman_correlation: float | None = None
+    pearson_correlation: NonFiniteFloat | None = None  # float (may be negative)
+    spearman_correlation: NonFiniteFloat | None = None
     calibration_verdict: str | None = None
     n_samples: int | None = None
 
 
 class PruningDecision(_Model):
     mode: str | None = None  # plain str; forward-compat
-    threshold_rank_correlation: float | None = None
+    threshold_rank_correlation: NonFiniteFloat | None = None
     configs_total: int | None = None
     configs_predicted_top_k: int | None = None
     configs_measured: int | None = None
@@ -272,12 +303,12 @@ class Suggestion(_Model):
 class RooflinePrediction(_Model):
     kernel_id: str
     gpu_spec: GpuSpec | None = None
-    arithmetic_intensity: float | None = None
+    arithmetic_intensity: NonFiniteFloat | None = None
     bound_type: str | None = None  # plain str ("memory"/"compute"); forward-compat
-    theoretical_lower_bound_us: float | None = None
-    empirical_predictor_us: float | None = None
-    measured_us: float | None = None
-    achieved_vs_predictor: float | None = None
+    theoretical_lower_bound_us: NonFiniteFloat | None = None
+    empirical_predictor_us: NonFiniteFloat | None = None
+    measured_us: NonFiniteFloat | None = None
+    achieved_vs_predictor: NonFiniteFloat | None = None
     corrections_applied: list[str] = Field(default_factory=list)
     calibration: Calibration | None = None
     pruning_decision: PruningDecision | None = None
@@ -352,9 +383,9 @@ class FusionOpportunity(_Model):
     pattern_id: str
     location: FusionLocation | None = None
     shape: FusionShape | None = None
-    baseline_hbm_bytes: float | None = None
-    fused_hbm_bytes: float | None = None
-    estimated_speedup: float | None = None
+    baseline_hbm_bytes: NonFiniteFloat | None = None
+    fused_hbm_bytes: NonFiniteFloat | None = None
+    estimated_speedup: NonFiniteFloat | None = None
     suggested_kernel: str | None = None
     confidence: str | None = None  # "high" / "medium" / "low" (plain str, forward-compat)
 
