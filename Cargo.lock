@@ -239,6 +239,7 @@ dependencies = [
  "cls-analyzer",
  "cls-correctness-db",
  "cls-errors",
+ "cls-report",
  "cls-sarif",
  "cls-schema",
  "cls-schema-migrate",

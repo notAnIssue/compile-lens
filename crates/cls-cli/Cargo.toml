@@ -14,6 +14,7 @@ clap = { workspace = true }
 cls-analyzer = { path = "../cls-analyzer" }
 cls-correctness-db = { path = "../cls-correctness-db" }
 cls-errors = { path = "../cls-errors" }
+cls-report = { path = "../cls-report" }
 cls-sarif = { path = "../cls-sarif" }
 cls-schema = { path = "../cls-schema" }
 cls-schema-migrate = { path = "../cls-schema-migrate" }
