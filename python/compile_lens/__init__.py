@@ -1,5 +1,6 @@
 """compile-lens — diagnostics for torch.compile production observability."""
 
+from compile_lens.session import Session, session
 from compile_lens.tools.divergence import (
     CausalAttribution,
     DivergenceFindings,
@@ -17,8 +18,10 @@ __all__ = [
     "DivergenceFindings",
     "DivergenceSession",
     "MinifierStatus",
+    "Session",
     "accuracy_minifier",
     "attribute_divergence",
     "divergence_session",
+    "session",
     "__version__",
 ]
