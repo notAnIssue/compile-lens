@@ -26,6 +26,7 @@
   },
 
   "$defs": {
+    "nonFiniteFloat": { "type": "string", "enum": ["NaN", "Infinity", "-Infinity"], "description": "Non-finite number encoded as an explicit string sentinel (ADR-039)." },
     "RedactionPolicy": {
       "type": "string",
       "enum": ["default-strict", "internal", "confidential", "public-safe"],
@@ -119,7 +120,7 @@
           }
         },
         "occurred_at_step": { "type": "integer", "minimum": 0 },
-        "wall_clock_ms": { "type": "number", "minimum": 0 }
+        "wall_clock_ms": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] }
       }
     },
 
@@ -159,7 +160,7 @@
       "required": ["name"],
       "properties": {
         "name": { "type": "string" },
-        "duration_ms": { "type": "number", "minimum": 0 }
+        "duration_ms": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] }
       }
     },
 
@@ -169,7 +170,7 @@
       "required": ["iteration_index"],
       "properties": {
         "iteration_index": { "type": "integer", "minimum": 0 },
-        "timestamp_ms": { "type": "number", "minimum": 0 },
+        "timestamp_ms": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "guard_evaluations": {
           "type": "array",
           "items": {
@@ -237,7 +238,10 @@
           "description": "Qualified name of the first layer (eager execution order) past tolerance; absent when nothing diverged."
         },
         "max_abs_diff": {
-          "type": "number",
+          "anyOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/nonFiniteFloat" }
+          ],
           "description": "Max absolute element-wise diff at that layer; absent for a shape mismatch or no divergence."
         },
         "num_layers_compared": { "type": "integer", "minimum": 0 },
@@ -289,14 +293,14 @@
             "num_stages": { "type": "integer", "minimum": 1 }
           }
         },
-        "occupancy_hint": { "type": "number", "minimum": 0, "maximum": 1 },
+        "occupancy_hint": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "features": {
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "flops": { "type": "number", "minimum": 0 },
-            "bytes_loaded": { "type": "number", "minimum": 0 },
-            "bytes_stored": { "type": "number", "minimum": 0 },
+            "flops": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "bytes_loaded": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "bytes_stored": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
             "block_size": { "type": "integer", "minimum": 0 },
             "num_regs": { "type": "integer", "minimum": 0, "description": "Register pressure proxy (Tool 5 4th correction)." },
             "n_spills": { "type": "integer", "minimum": 0 }
@@ -307,9 +311,9 @@
           "additionalProperties": true,
           "properties": {
             "iterations": { "type": "integer", "minimum": 1 },
-            "mean_us": { "type": "number", "minimum": 0 },
-            "median_us": { "type": "number", "minimum": 0 },
-            "p99_us": { "type": "number", "minimum": 0 },
+            "mean_us": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "median_us": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "p99_us": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
             "source": { "type": "string", "enum": ["proton", "self_timed"] }
           }
         },
@@ -328,25 +332,25 @@
           "additionalProperties": true,
           "properties": {
             "name": { "type": "string" },
-            "peak_compute_tflops_bf16": { "type": "number", "minimum": 0 },
-            "peak_bw_gbps": { "type": "number", "minimum": 0 },
-            "l2_cache_mb": { "type": "number", "minimum": 0 },
+            "peak_compute_tflops_bf16": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "peak_bw_gbps": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "l2_cache_mb": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
             "sm_count": { "type": "integer", "minimum": 0 }
           }
         },
-        "arithmetic_intensity": { "type": "number", "minimum": 0 },
+        "arithmetic_intensity": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "bound_type": { "type": "string", "enum": ["memory", "compute"] },
-        "theoretical_lower_bound_us": { "type": "number", "minimum": 0, "description": "Ideal Williams roofline; reference only, not used for pruning." },
-        "empirical_predictor_us": { "type": "number", "minimum": 0, "description": "After 4 corrections; used for ranking/pruning." },
-        "measured_us": { "type": "number", "minimum": 0 },
-        "achieved_vs_predictor": { "type": "number", "minimum": 0 },
+        "theoretical_lower_bound_us": { "anyOf": [{ "type": "number", "minimum": 0, "description": "Ideal Williams roofline; reference only, not used for pruning." }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+        "empirical_predictor_us": { "anyOf": [{ "type": "number", "minimum": 0, "description": "After 4 corrections; used for ranking/pruning." }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+        "measured_us": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+        "achieved_vs_predictor": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "corrections_applied": { "type": "array", "items": { "type": "string" } },
         "calibration": {
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "pearson_correlation": { "type": "number" },
-            "spearman_correlation": { "type": "number" },
+            "pearson_correlation": { "anyOf": [{ "type": "number" }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+            "spearman_correlation": { "anyOf": [{ "type": "number" }, { "$ref": "#/$defs/nonFiniteFloat" }] },
             "calibration_verdict": { "type": "string" },
             "n_samples": { "type": "integer", "minimum": 0 }
           }
@@ -356,7 +360,7 @@
           "additionalProperties": true,
           "properties": {
             "mode": { "type": "string", "enum": ["aggressive", "moderate", "disabled_fallback_full_sweep"] },
-            "threshold_rank_correlation": { "type": "number" },
+            "threshold_rank_correlation": { "anyOf": [{ "type": "number" }, { "$ref": "#/$defs/nonFiniteFloat" }] },
             "configs_total": { "type": "integer", "minimum": 0 },
             "configs_predicted_top_k": { "type": "integer", "minimum": 0 },
             "configs_measured": { "type": "integer", "minimum": 0 }
@@ -423,9 +427,9 @@
             "dtype": { "type": "string" }
           }
         },
-        "baseline_hbm_bytes": { "type": "number", "minimum": 0 },
-        "fused_hbm_bytes": { "type": "number", "minimum": 0 },
-        "estimated_speedup": { "type": "number", "minimum": 0, "description": "baseline/fused under the memory-bound assumption; analytical only (N10)." },
+        "baseline_hbm_bytes": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+        "fused_hbm_bytes": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+        "estimated_speedup": { "anyOf": [{ "type": "number", "minimum": 0, "description": "baseline/fused under the memory-bound assumption; analytical only (N10)." }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "suggested_kernel": { "type": "string", "description": "a fused epilogue kernel kernel name; a string reference only, never imported or called." },
         "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
       }

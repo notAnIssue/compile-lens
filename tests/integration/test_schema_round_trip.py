@@ -12,6 +12,7 @@ only as a JSON file, no FFI).
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from pathlib import Path
 
@@ -140,3 +141,32 @@ def test_nested_object_key_order_survives_cross_language(tmp_path: Path) -> None
     assert list(rust_raw["future_options"].keys()) == ["zzz", "aaa", "mmm"], (
         f"Rust must preserve nested key order, got {list(rust_raw['future_options'].keys())}"
     )
+
+
+def test_non_finite_survives_cross_language(tmp_path: Path) -> None:
+    """ADR-039: a NaN ``max_abs_diff`` (the compiled model produced NaN — Tool 3's strongest signal)
+    must survive Python -> Rust -> Python as the explicit `"NaN"` sentinel on both sides, never
+    silently collapsing to ``null``/``None``."""
+    data = json.loads((EXAMPLES / "full.cls.json").read_text())
+    data["divergences"] = [
+        {
+            "divergence_id": "dnan",
+            "num_layers_compared": 3,
+            "max_abs_diff": "NaN",
+            "rtol": 1e-3,
+            "atol": 1e-5,
+        }
+    ]
+    # Python writes it: the sentinel, not null.
+    py_out = tmp_path / "py.json"
+    py_out.write_text(to_json(from_json(json.dumps(data))))
+    assert json.loads(py_out.read_text())["divergences"][0]["max_abs_diff"] == "NaN"
+
+    # Rust reads "NaN" -> NaN -> re-emits "NaN".
+    rust_out = tmp_path / "rust.json"
+    _rust_roundtrip(py_out, rust_out)
+    assert json.loads(rust_out.read_text())["divergences"][0]["max_abs_diff"] == "NaN"
+
+    # Python reads it back as an actual NaN float — the signal survived the full loop.
+    back = from_json(rust_out.read_text())
+    assert math.isnan(back.divergences[0].max_abs_diff)
