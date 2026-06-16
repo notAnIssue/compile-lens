@@ -154,7 +154,7 @@ enum Command {
         #[arg(long, value_enum, default_value_t = LintFormat::Markdown)]
         format: LintFormat,
 
-        /// Drop findings below this severity (`info` < `warning` < `high`).
+        /// Drop findings below this severity. compile-lint is binary: `info` < `high`.
         #[arg(long, value_name = "LEVEL")]
         min_severity: Option<String>,
     },
@@ -552,7 +552,7 @@ fn compile_lint(
 
     if let Some(floor) = min_severity.as_deref() {
         let floor_rank = severity_rank(floor).ok_or_else(|| ClsError::InvalidCliArgs {
-            detail: format!("--min-severity `{floor}` must be one of: info, warning, high"),
+            detail: format!("--min-severity `{floor}` must be one of: info, high"),
         })?;
         report
             .findings
@@ -600,11 +600,12 @@ fn load_pattern_db(
 }
 
 /// Rank a severity label for `--min-severity` comparison; `None` for an unrecognized label so a
-/// typo'd floor is rejected (CLS-E0004) rather than silently passing every finding.
+/// typo'd floor is rejected (CLS-E0004) rather than silently passing every finding. compile-lint
+/// emits only `info` and `high` (a finding is `high` unless its issue is already fixed for the
+/// user's torch version, then `info`), so those are the only two floors — there is no `warning`.
 fn severity_rank(severity: &str) -> Option<u8> {
     match severity {
-        "high" => Some(3),
-        "warning" => Some(2),
+        "high" => Some(2),
         "info" => Some(1),
         _ => None,
     }

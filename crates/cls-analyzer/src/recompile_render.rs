@@ -335,3 +335,54 @@ fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
         many
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vt(previous: Option<&str>, new: Option<&str>) -> ValueTransition {
+        ValueTransition {
+            previous: previous.map(str::to_string),
+            new: new.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn axis_label_falls_back_to_uncategorized() {
+        let none: Option<String> = None;
+        assert_eq!(axis_label(&none), "(uncategorized)");
+        assert_eq!(axis_label(&Some("x[0]".to_string())), "x[0]");
+    }
+
+    #[test]
+    fn values_clause_marks_a_missing_side_with_question_mark() {
+        // A transition that carried only one side renders the other as `?`.
+        let clause = values_clause(&[vt(Some("4"), None), vt(None, Some("8"))], "→");
+        assert_eq!(clause, " — values 4→?, ?→8");
+    }
+
+    #[test]
+    fn values_clause_truncates_after_five() {
+        let many: Vec<ValueTransition> = (0..7)
+            .map(|i| ValueTransition {
+                previous: Some("a".to_string()),
+                new: Some(i.to_string()),
+            })
+            .collect();
+        let clause = values_clause(&many, "→");
+        assert!(
+            clause.ends_with(", …"),
+            "should truncate with an ellipsis: {clause}"
+        );
+        assert_eq!(
+            clause.matches('→').count(),
+            5,
+            "at most 5 transitions shown: {clause}"
+        );
+    }
+
+    #[test]
+    fn values_clause_is_empty_for_no_values() {
+        assert_eq!(values_clause(&[], "→"), "");
+    }
+}

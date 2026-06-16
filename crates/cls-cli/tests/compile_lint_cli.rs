@@ -158,3 +158,23 @@ fn unrecognized_min_severity_is_rejected() {
     // A bad argument is CLS-E0004 -> exit 6, never the value `1` the CI gate reserves.
     assert_eq!(out.status.code(), Some(6), "expected arg-validation exit");
 }
+
+#[test]
+fn warning_is_not_a_severity_level() {
+    // compile-lint is binary (info|high); `warning` was a dead floor and is no longer accepted.
+    let out = cl()
+        .arg("compile-lint")
+        .arg(fixture("unfixed.cls.json"))
+        .arg("--db")
+        .arg(fixture("correctness_db.toml"))
+        .arg("--min-severity")
+        .arg("warning")
+        .output()
+        .expect("spawn cl");
+
+    assert_eq!(
+        out.status.code(),
+        Some(6),
+        "warning is no longer a valid severity floor"
+    );
+}
