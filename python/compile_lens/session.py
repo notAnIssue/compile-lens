@@ -174,12 +174,13 @@ class Session:
     def report(self, output: Path | str | None = None) -> object:
         """Render the session's `.cls.json` into the hero HTML report.
 
-        Not built yet: rendering goes through `cl session report` (Phase 7, a later change). For now
-        read the artifact at :attr:`artifact_path`.
+        The renderer ships as the `cl session report` CLI; wiring it into this Python method (so
+        `s.report().save_html(...)` works directly) is a later change. For now, render the written
+        artifact with the command below.
         """
         raise NotImplementedError(
-            "Session.report() renders via `cl session report`, which is not built yet. "
-            "For now, the written artifact is at session.artifact_path."
+            "Python-side report() is not wired yet. Render the written artifact with: "
+            f"`cl session report {self.artifact_path} --output report.html`"
         )
 
 
