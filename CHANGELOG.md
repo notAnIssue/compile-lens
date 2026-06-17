@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The hero report's CODA fusion section now runs the Tool 6 analyzer instead of reading a stored
+  array. `cl session report` derives `fusion_opportunities` from the captured graphs (the same way
+  it already runs lint and roofline), so the crown-jewel section populates for a freshly captured
+  session rather than silently rendering "none".
+
 Tool 6 (`fusion-detect`) complete: a CODA-style algebraic fusion-opportunity detector for
 `torch.compile` graphs. It finds the `GEMM-Residual-RMSNorm-GEMM` pattern Inductor leaves unfused —
 the per-row `1/rms` scalar can be folded through the second GEMM's epilogue so the RMSNorm never

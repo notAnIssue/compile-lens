@@ -526,10 +526,15 @@ fn session_report(
     // Roofline is always computed against `--gpu` (default = project baseline), so the section shows
     // real numbers by default; an unknown GPU name errors here rather than silently dropping it.
     let roofline = cls_analyzer::roofline::analyze(&artifact, &gpu, REPORT_ROOFLINE_TOP_K)?;
+    // Fusion (Tool 6) is derived from the captured graphs, not stored on the artifact, so the report
+    // runs the analyzer the same way it runs lint/roofline — otherwise the crown-jewel section would
+    // always render empty for a freshly captured session.
+    let fusion = cls_analyzer::fusion::analyze(&artifact);
     let inputs = cls_report::ReportInputs {
         diff: diff.as_ref(),
         lint: lint.as_ref(),
         roofline: Some(&roofline),
+        fusion: Some(&fusion),
     };
     let html = cls_report::render(&artifact, &inputs);
     match output {
