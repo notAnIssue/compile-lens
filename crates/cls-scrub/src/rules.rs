@@ -183,6 +183,48 @@ pub fn hash_host(fqdn: &str, salt: &str) -> String {
     format!("dh-{}", &hex::encode(digest)[..8])
 }
 
+/// The per-install salt for [`hash_host`].
+///
+/// Resolution order mirrors the Python `install_salt` so both halves of the toolkit hash a host
+/// to the same `dh-<…>`: the `CLS_INSTALL_ID` env var wins (deterministic for tests and
+/// reproducible runs); otherwise read-or-create `~/.compile-lens/install-id`, a random hex
+/// secret that is never shared. Reading the *same file* the collector wrote is what keeps the
+/// host hash stable across a collect-then-scrub round trip on one machine.
+pub fn install_salt() -> std::io::Result<String> {
+    if let Some(id) = std::env::var_os("CLS_INSTALL_ID") {
+        let id = id.to_string_lossy().into_owned();
+        if !id.is_empty() {
+            return Ok(id);
+        }
+    }
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "HOME is not set"))?;
+    let dir = std::path::Path::new(&home).join(".compile-lens");
+    let path = dir.join("install-id");
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+    std::fs::create_dir_all(&dir)?;
+    let salt = random_hex_16()?;
+    std::fs::write(&path, &salt)?;
+    Ok(salt)
+}
+
+/// 16 random bytes as a 32-char lowercase hex string, drawn from `/dev/urandom`.
+///
+/// Used once to seed a machine's install salt. We read the OS CSPRNG directly rather than pull a
+/// `rand`/`getrandom` dependency — the project targets Linux/macOS (Windows is out of scope per
+/// the redaction policy's open questions), and this is a single 16-byte read.
+fn random_hex_16() -> std::io::Result<String> {
+    use std::io::Read;
+    let mut buf = [0u8; 16];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
+    Ok(hex::encode(buf))
+}
+
 /// Whether a host value is *already* an FQDN hash (`dh-<8 lowercase hex>`).
 ///
 /// Re-scrubbing an artifact must be a fixed point (the corpus pins idempotence), so a host that

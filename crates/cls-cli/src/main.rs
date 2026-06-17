@@ -231,6 +231,33 @@ enum Command {
         #[command(subcommand)]
         action: SessionCommand,
     },
+
+    /// Sanitize a `.cls.json` artifact before sharing — promote it to a stricter redaction
+    /// level (scrub paths / argv tokens / kernel sources / host). Promotion is one-way: a
+    /// request to *demote* (a less strict `--to` than the artifact already is) is refused
+    /// (CLS-E0009), because redaction is lossy and raw data can only return by re-collecting.
+    Scrub {
+        /// The `.cls.json` artifact to sanitize.
+        file: std::path::PathBuf,
+
+        /// Target redaction level. Defaults to at least `default-strict` (never demotes: an
+        /// artifact already stricter than `default-strict` keeps its level).
+        #[arg(long = "to", value_enum, value_name = "LEVEL")]
+        to: Option<RedactionLevel>,
+
+        /// Write the sanitized artifact here. Without it the file is sanitized in place.
+        #[arg(short, long, value_name = "PATH")]
+        output: Option<std::path::PathBuf>,
+
+        /// Report what would change without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Also scrub long base64/hex argv runs as possible novel secrets (more aggressive,
+        /// can over-match a legitimate long argument).
+        #[arg(long)]
+        strict: bool,
+    },
 }
 
 /// Subcommands under `cl session`.
@@ -270,6 +297,17 @@ enum RedactionLevel {
     Confidential,
     #[value(name = "public-safe")]
     PublicSafe,
+}
+
+impl From<RedactionLevel> for cls_schema::RedactionPolicy {
+    fn from(level: RedactionLevel) -> Self {
+        match level {
+            RedactionLevel::DefaultStrict => cls_schema::RedactionPolicy::DefaultStrict,
+            RedactionLevel::Internal => cls_schema::RedactionPolicy::Internal,
+            RedactionLevel::Confidential => cls_schema::RedactionPolicy::Confidential,
+            RedactionLevel::PublicSafe => cls_schema::RedactionPolicy::PublicSafe,
+        }
+    }
 }
 
 /// Output format for `cl recompile-summary --format`. Maps onto the analyzer's
@@ -413,6 +451,14 @@ fn run(cli: Cli) -> Result<(), ClsError> {
                 output,
             } => session_report(session, base, gpu, db, output),
         },
+
+        Some(Command::Scrub {
+            file,
+            to,
+            output,
+            dry_run,
+            strict,
+        }) => scrub(file, to, output, dry_run, strict),
 
         None => Ok(()),
     }
@@ -816,5 +862,107 @@ fn migrate(
         Err(ClsError::InvalidCliArgs {
             detail: "either --output <path> or --dry-run is required".into(),
         })
+    }
+}
+
+/// `cl scrub <file>` — promote a `.cls.json` artifact to a stricter redaction level before
+/// sharing. Loads + version-gates the artifact (the shared loader), runs the `cls-scrub` rules,
+/// and writes the sanitized JSON (in place, or to `--output`). `--dry-run` reports the change
+/// without writing. Demotion is refused inside `redact_artifact` (CLS-E0009).
+fn scrub(
+    file: std::path::PathBuf,
+    to: Option<RedactionLevel>,
+    output: Option<std::path::PathBuf>,
+    dry_run: bool,
+    strict: bool,
+) -> Result<(), ClsError> {
+    // HTML report sanitization is a separate path (it re-runs the XSS escape + URL allowlist,
+    // not the JSON field rules); this handler only takes `.cls.json` artifacts.
+    if file
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("html"))
+    {
+        return Err(ClsError::NotYetImplemented {
+            surface: "cl scrub <report.html>".into(),
+            tracking: "HTML report re-sanitization lands in a follow-up".into(),
+        });
+    }
+
+    let mut artifact = cls_schema_migrate::load_artifact(&file)?;
+    let current = artifact.session.redaction_policy;
+    // Default target is "at least default-strict, never demote" so `cl scrub <file>` with no
+    // flag always lands on a share-safe artifact and an already-stricter one keeps its level.
+    let target = match to {
+        Some(level) => level.into(),
+        None => cls_scrub::stricter_of(current, cls_schema::RedactionPolicy::DefaultStrict),
+    };
+
+    let salt = cls_scrub::rules::install_salt().map_err(|source| ClsError::IoError {
+        path: "~/.compile-lens/install-id".into(),
+        source,
+    })?;
+
+    let stats = cls_scrub::redact_artifact(&mut artifact, target, &salt, strict)?;
+    let summary = format_scrub_summary(&stats);
+    let level = cls_scrub::level_name(target);
+
+    if dry_run {
+        println!("would scrub {} -> {level} ({summary})", file.display());
+        return Ok(());
+    }
+
+    let json =
+        serde_json::to_string(&artifact).map_err(|source| ClsError::SchemaParseError { source })?;
+    let dest = output.as_deref().unwrap_or(&file);
+    std::fs::write(dest, json).map_err(|source| ClsError::IoError {
+        path: dest.display().to_string(),
+        source,
+    })?;
+    println!("✅ wrote {} ({level}: {summary})", dest.display());
+    Ok(())
+}
+
+/// Build the operator-facing one-line summary of a scrub, listing only the parts that changed
+/// (e.g. `host redacted, 1 argv token scrubbed, 2 kernel sources removed`). "no changes" when
+/// the artifact was already at or above the target's guarantees.
+fn format_scrub_summary(stats: &cls_scrub::RedactionStats) -> String {
+    fn plural(n: usize, noun: &str) -> String {
+        format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
+    }
+    let mut parts = Vec::new();
+    if stats.host_redacted {
+        parts.push("host redacted".to_string());
+    }
+    if stats.argv_tokens_scrubbed {
+        parts.push("argv scrubbed".to_string());
+    }
+    if stats.paths_normalized > 0 {
+        parts.push(format!(
+            "{} normalized",
+            plural(stats.paths_normalized, "path")
+        ));
+    }
+    if stats.kernel_sources_removed > 0 {
+        parts.push(format!(
+            "{} removed",
+            plural(stats.kernel_sources_removed, "kernel source")
+        ));
+    }
+    if stats.source_excerpts_removed > 0 {
+        parts.push(format!(
+            "{} removed",
+            plural(stats.source_excerpts_removed, "source excerpt")
+        ));
+    }
+    if stats.env_vars_dropped > 0 {
+        parts.push(format!(
+            "{} dropped",
+            plural(stats.env_vars_dropped, "env var")
+        ));
+    }
+    if parts.is_empty() {
+        "no changes".to_string()
+    } else {
+        parts.join(", ")
     }
 }
