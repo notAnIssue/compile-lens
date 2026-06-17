@@ -139,6 +139,49 @@ fn demote_is_refused_exit_eleven() {
 }
 
 #[test]
+fn verify_flags_a_leaky_artifact_exit_one() {
+    // A confidential artifact audited against default-strict still leaks -> exit 1, ⚠️ lines.
+    let path = write_temp("verify_leaky.cls.json", LEAKY);
+    let out = cl()
+        .arg("scrub")
+        .arg("--verify")
+        .arg(&path)
+        .arg("--target")
+        .arg("default-strict")
+        .output()
+        .expect("spawn cl");
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "a leaky artifact must fail verify"
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("NOT default-strict"), "stdout:\n{stdout}");
+}
+
+#[test]
+fn verify_passes_after_scrub_exit_zero() {
+    // Scrub first, then audit the result: clean, exit 0, SHARE-SAFE verdict.
+    let path = write_temp("verify_clean.cls.json", LEAKY);
+    let scrub = cl().arg("scrub").arg(&path).output().expect("spawn cl");
+    assert!(scrub.status.success());
+
+    let out = cl()
+        .arg("scrub")
+        .arg("--verify")
+        .arg(&path)
+        .output()
+        .expect("spawn cl");
+    let _ = std::fs::remove_file(&path);
+
+    assert!(out.status.success(), "exit: {:?}", out.status.code());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("SHARE-SAFE"), "stdout:\n{stdout}");
+}
+
+#[test]
 fn html_input_is_not_yet_implemented_exit_thirteen() {
     // HTML report sanitization is a separate path; routing it here returns CLS-E0011, exit 13.
     let path = write_temp("report.html", "<html></html>");

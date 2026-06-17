@@ -68,24 +68,21 @@ static STRICT_TOKEN_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new
 /// Redact secret-looking tokens from an argv string, preserving each flag/key.
 ///
 /// `strict` additionally scrubs long base64/hex runs (§2.2). Returns the scrubbed string and
-/// whether any replacement fired (the caller uses the bool for the operator-facing count).
+/// whether the value **actually changed** — re-scrubbing an already-scrubbed command (where
+/// `--flag=<scrubbed>` still *matches* `(--flag=)\S+` but the replacement is identical) reports
+/// `false`. That makes the bool a true leak signal, which the verifier and the idempotence
+/// guarantee both rely on, not merely "a pattern fired".
 pub fn scrub_command(command: &str, strict: bool) -> (String, bool) {
     let mut out = command.to_string();
-    let mut changed = false;
     for (pattern, replacement) in COMMAND_SCRUBS.iter() {
-        if pattern.is_match(&out) {
-            out = pattern.replace_all(&out, *replacement).into_owned();
-            changed = true;
-        }
+        out = pattern.replace_all(&out, *replacement).into_owned();
     }
     if strict {
         for (pattern, replacement) in STRICT_TOKEN_SCRUBS.iter() {
-            if pattern.is_match(&out) {
-                out = pattern.replace_all(&out, *replacement).into_owned();
-                changed = true;
-            }
+            out = pattern.replace_all(&out, *replacement).into_owned();
         }
     }
+    let changed = out != command;
     (out, changed)
 }
 

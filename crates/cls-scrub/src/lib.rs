@@ -203,6 +203,190 @@ fn normalize_field(
     Ok(())
 }
 
+/// One category of the share-safety audit (`cl scrub --verify`): a category name, whether it
+/// passed, and a human detail line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifyCheck {
+    pub passed: bool,
+    pub message: String,
+}
+
+/// The result of auditing an artifact against a `target` redaction level — a per-category list of
+/// [`VerifyCheck`]s plus the artifact's own declared policy. The artifact is **share-safe for
+/// `target`** exactly when every check passed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifyReport {
+    pub declared: RedactionPolicy,
+    pub target: RedactionPolicy,
+    pub checks: Vec<VerifyCheck>,
+}
+
+impl VerifyReport {
+    /// Whether the artifact already meets every share-safety guarantee of `target`.
+    pub fn is_clean(&self) -> bool {
+        self.checks.iter().all(|c| c.passed)
+    }
+}
+
+/// Audit whether `artifact` already satisfies the redaction guarantees of `target` — the read-only
+/// counterpart to [`redact_artifact`]. It never mutates; it reports, per category, whether a leak
+/// remains (an unscrubbed token, a raw host, an un-normalized path, a present source/kernel
+/// excerpt, a non-allowlisted env var). The categories mirror the rules [`redact_artifact`]
+/// applies, so "verify is clean" means "scrubbing to `target` would change nothing".
+///
+/// A non-strict `target` (`internal` / `confidential`) makes no share-safety promise, so the audit
+/// is vacuously clean.
+pub fn verify(artifact: &ClsArtifact, target: RedactionPolicy) -> VerifyReport {
+    let declared = artifact.session.redaction_policy;
+    let mut checks = Vec::new();
+
+    if is_strict(target) {
+        let public_safe = matches!(target, RedactionPolicy::PublicSafe);
+        let detected_repo = rules::detect_repo();
+        let repo = detected_repo.as_deref();
+
+        // ── command ──
+        match artifact.session.command.as_ref() {
+            Some(_) if public_safe => checks.push(VerifyCheck {
+                passed: false,
+                message: "command is present (public-safe nulls it)".into(),
+            }),
+            Some(cmd) => {
+                let has_token = rules::scrub_command(cmd, false).1;
+                checks.push(VerifyCheck {
+                    passed: !has_token,
+                    message: if has_token {
+                        "command contains an unscrubbed secret-like token".into()
+                    } else {
+                        "no unscrubbed argv tokens".into()
+                    },
+                });
+            }
+            None => checks.push(VerifyCheck {
+                passed: true,
+                message: "no command recorded".into(),
+            }),
+        }
+
+        // ── host ──
+        match artifact.session.host.as_ref() {
+            Some(_) if public_safe => checks.push(VerifyCheck {
+                passed: false,
+                message: "host is present (public-safe nulls it)".into(),
+            }),
+            Some(h) if !rules::is_hashed_host(h) => checks.push(VerifyCheck {
+                passed: false,
+                message: "host is not FQDN-hashed".into(),
+            }),
+            _ => checks.push(VerifyCheck {
+                passed: true,
+                message: if public_safe {
+                    "host is nulled".into()
+                } else {
+                    "host is FQDN-hashed".into()
+                },
+            }),
+        }
+
+        // ── env vars ──
+        let leaky_env: Vec<&String> = artifact
+            .session
+            .env_snapshot
+            .as_ref()
+            .map(|env| {
+                env.relevant_env_vars
+                    .keys()
+                    .filter(|k| !rules::env_var_allowed(k))
+                    .collect()
+            })
+            .unwrap_or_default();
+        checks.push(VerifyCheck {
+            passed: leaky_env.is_empty(),
+            message: if leaky_env.is_empty() {
+                "env vars are allowlisted".into()
+            } else {
+                format!("{} non-allowlisted env var(s) present", leaky_env.len())
+            },
+        });
+
+        // ── paths (graph / kernel / lint) ──
+        let mut path_leaks = 0usize;
+        let mut credential_dir = false;
+        let mut check_path = |p: &Option<String>| {
+            if let Some(path) = p {
+                match rules::normalize_path(path, repo, public_safe) {
+                    Ok(normalized) if &normalized != path => path_leaks += 1,
+                    Ok(_) => {}
+                    Err(_) => credential_dir = true, // CLS-E0008: a credential-dir path is present
+                }
+            }
+        };
+        for g in &artifact.compiled_graphs {
+            check_path(&g.fx_graph_path);
+            check_path(&g.inductor_ir_path);
+        }
+        for k in &artifact.kernels {
+            check_path(&k.source_path);
+        }
+        for f in &artifact.lint_findings {
+            if let Some(loc) = &f.source_location {
+                check_path(&loc.file);
+            }
+        }
+        let path_ok = path_leaks == 0 && !credential_dir;
+        checks.push(VerifyCheck {
+            passed: path_ok,
+            message: if credential_dir {
+                "a path under a credential directory is present".into()
+            } else if path_leaks > 0 {
+                format!("{path_leaks} un-normalized path(s) present")
+            } else {
+                "no raw paths present".into()
+            },
+        });
+
+        // ── source excerpts (lint) ──
+        let source_excerpts = artifact
+            .lint_findings
+            .iter()
+            .filter(|f| {
+                f.source_location
+                    .as_ref()
+                    .is_some_and(|l| l.code_excerpt.is_some())
+            })
+            .count();
+        checks.push(VerifyCheck {
+            passed: source_excerpts == 0,
+            message: if source_excerpts == 0 {
+                "no source excerpts present".into()
+            } else {
+                format!("{source_excerpts} source excerpt(s) present")
+            },
+        });
+
+        // ── kernel sources (PTX / excerpt) ──
+        let kernel_sources = artifact
+            .kernels
+            .iter()
+            .filter(|k| k.ptx_path.is_some() || k.kernel_source_excerpt.is_some())
+            .count();
+        checks.push(VerifyCheck {
+            passed: kernel_sources == 0,
+            message: if kernel_sources == 0 {
+                "no kernel sources present".into()
+            } else {
+                format!("{kernel_sources} kernel source(s) present")
+            },
+        });
+    }
+
+    VerifyReport {
+        declared,
+        target,
+        checks,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,5 +560,55 @@ mod tests {
         assert!(is_strict(RedactionPolicy::PublicSafe));
         assert!(!is_strict(RedactionPolicy::Internal));
         assert!(!is_strict(RedactionPolicy::Confidential));
+    }
+
+    #[test]
+    fn verify_flags_a_leaky_artifact() {
+        let artifact = leaky_artifact("confidential");
+        let report = verify(&artifact, RedactionPolicy::DefaultStrict);
+        assert!(
+            !report.is_clean(),
+            "a raw confidential artifact is not share-safe"
+        );
+        // The host, command, env, and kernel-source categories should each fail.
+        let failed: Vec<&str> = report
+            .checks
+            .iter()
+            .filter(|c| !c.passed)
+            .map(|c| c.message.as_str())
+            .collect();
+        assert!(failed.iter().any(|m| m.contains("host")));
+        assert!(failed.iter().any(|m| m.contains("token")));
+        assert!(failed.iter().any(|m| m.contains("env")));
+        assert!(failed.iter().any(|m| m.contains("kernel source")));
+    }
+
+    #[test]
+    fn verify_passes_after_scrubbing() {
+        let mut artifact = leaky_artifact("confidential");
+        redact_artifact(&mut artifact, RedactionPolicy::DefaultStrict, "salt", false).unwrap();
+        let report = verify(&artifact, RedactionPolicy::DefaultStrict);
+        assert!(
+            report.is_clean(),
+            "a default-strict-scrubbed artifact verifies clean; failures: {:?}",
+            report
+                .checks
+                .iter()
+                .filter(|c| !c.passed)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn verify_default_strict_is_not_public_safe() {
+        let mut artifact = leaky_artifact("confidential");
+        redact_artifact(&mut artifact, RedactionPolicy::DefaultStrict, "salt", false).unwrap();
+        // Clean for default-strict, but public-safe demands host+command nulled.
+        let report = verify(&artifact, RedactionPolicy::PublicSafe);
+        assert!(!report.is_clean());
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| !c.passed && c.message.contains("host is present")));
     }
 }

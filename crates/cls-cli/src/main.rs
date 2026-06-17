@@ -237,12 +237,24 @@ enum Command {
     /// request to *demote* (a less strict `--to` than the artifact already is) is refused
     /// (CLS-E0009), because redaction is lossy and raw data can only return by re-collecting.
     Scrub {
-        /// The `.cls.json` artifact to sanitize.
+        /// The `.cls.json` artifact to sanitize (or audit, with `--verify`).
         file: std::path::PathBuf,
 
-        /// Target redaction level. Defaults to at least `default-strict` (never demotes: an
-        /// artifact already stricter than `default-strict` keeps its level).
-        #[arg(long = "to", value_enum, value_name = "LEVEL")]
+        /// Audit mode: report whether the artifact already meets a level's share-safety
+        /// guarantees, without modifying it. Exits non-zero if any leak remains. Pairs with
+        /// `--target`; ignores the write flags.
+        #[arg(long)]
+        verify: bool,
+
+        /// Target redaction level. In write mode, defaults to at least `default-strict` (never
+        /// demotes). In `--verify` mode, the level to audit against (defaults to the artifact's
+        /// own declared policy).
+        #[arg(
+            long = "to",
+            visible_alias = "target",
+            value_enum,
+            value_name = "LEVEL"
+        )]
         to: Option<RedactionLevel>,
 
         /// Write the sanitized artifact here. Without it the file is sanitized in place.
@@ -454,11 +466,18 @@ fn run(cli: Cli) -> Result<(), ClsError> {
 
         Some(Command::Scrub {
             file,
+            verify,
             to,
             output,
             dry_run,
             strict,
-        }) => scrub(file, to, output, dry_run, strict),
+        }) => {
+            if verify {
+                scrub_verify(file, to)
+            } else {
+                scrub(file, to, output, dry_run, strict)
+            }
+        }
 
         None => Ok(()),
     }
@@ -920,6 +939,50 @@ fn scrub(
     })?;
     println!("✅ wrote {} ({level}: {summary})", dest.display());
     Ok(())
+}
+
+/// `cl scrub --verify <file> [--target LEVEL]` — audit whether the artifact already meets a
+/// level's share-safety guarantees, without modifying it. Prints a ✅/⚠️ line per category and a
+/// verdict, then exits 1 if any leak remains (so CI / a release gate can block on it). The target
+/// defaults to the artifact's own declared policy.
+fn scrub_verify(file: std::path::PathBuf, target: Option<RedactionLevel>) -> Result<(), ClsError> {
+    let artifact = cls_schema_migrate::load_artifact(&file)?;
+    let target = target
+        .map(Into::into)
+        .unwrap_or(artifact.session.redaction_policy);
+    let report = cls_scrub::verify(&artifact, target);
+
+    println!(
+        "artifact policy: {} (target: {})",
+        cls_scrub::level_name(report.declared),
+        cls_scrub::level_name(report.target),
+    );
+    for check in &report.checks {
+        println!(
+            "{} {}",
+            if check.passed { "✅" } else { "⚠️" },
+            check.message
+        );
+    }
+
+    if report.is_clean() {
+        println!(
+            "→ SHARE-SAFE for {} distribution",
+            cls_scrub::level_name(report.target)
+        );
+        Ok(())
+    } else {
+        println!(
+            "→ NOT {}; run: cl scrub {} --to {}",
+            cls_scrub::level_name(report.target),
+            file.display(),
+            cls_scrub::level_name(report.target),
+        );
+        // Distinct from the typed-error exit codes (3..): a successful audit that *found* a leak
+        // exits 1, like `cl compile-lint` exiting 1 on a surviving high finding, so a script can
+        // tell "verify ran and flagged a leak" from "verify itself errored".
+        process::exit(1);
+    }
 }
 
 /// Build the operator-facing one-line summary of a scrub, listing only the parts that changed
