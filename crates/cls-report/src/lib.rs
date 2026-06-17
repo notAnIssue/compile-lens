@@ -8,27 +8,46 @@
 //!
 //! Sections: session metadata, the base→head IR diff (Tool 2a, present only when a baseline is
 //! given), recompile summary, cache stability (Tool 2b), divergence (eager vs compiled, surfacing a
-//! NaN `max_abs_diff` as the headline signal per ADR-039), fusion opportunities (CODA crown-jewel),
-//! and a raw-artifacts footer. The remaining tool sections (lint / roofline) land in later changes;
-//! the XSS hardening (a payload corpus + a CSP header) is in place.
+//! NaN `max_abs_diff` as the headline signal per ADR-039), lint (Tool 4), fusion opportunities
+//! (CODA crown-jewel), roofline (Tool 5), and a raw-artifacts footer. The externally-computed
+//! analyses (diff, DB-escalated lint, roofline) arrive via [`ReportInputs`]; everything else is
+//! derived from the artifact. The XSS hardening (a payload corpus + a CSP header) is in place.
 
+use cls_analyzer::lint::LintReport;
+use cls_analyzer::roofline::RooflineReport;
 use cls_schema::{ClsArtifact, Session};
-// Re-exported: `render` takes it, so callers (the CLI, tests) need to name it.
+// Re-exported: `ReportInputs` names it, so callers (the CLI, tests) need to as well.
 pub use cls_wl_diff::IrGraphDiff;
 
-/// Render a session artifact into a self-contained HTML report. In `--base` mode the caller passes
-/// the base→head compile diff, which renders as the pillar IR Diff section; pass `None` for a
-/// single-session report (the section is then omitted entirely).
-pub fn render(artifact: &ClsArtifact, diff: Option<&IrGraphDiff>) -> String {
+/// The optional, externally-computed analyses a report can carry. Each is produced by the CLI — the
+/// compile diff, the DB-escalated lint, the roofline against a GPU — and handed in, so the renderer
+/// stays a pure function of what it is given (the same separation the diff already follows).
+/// `ReportInputs::default()` is a bare single-session report.
+#[derive(Default)]
+pub struct ReportInputs<'a> {
+    /// The base→head compile diff (Tool 2a); present in `--base` mode, renders the pillar section.
+    pub diff: Option<&'a IrGraphDiff>,
+    /// DB-escalated lint findings (Tool 4). `None` falls back to the artifact's raw candidates.
+    pub lint: Option<&'a LintReport>,
+    /// The roofline analysis (Tool 5), computed against the chosen GPU.
+    pub roofline: Option<&'a RooflineReport>,
+}
+
+/// Render a session artifact into a self-contained HTML report. The optional analyses in `inputs`
+/// (diff / lint / roofline) render as sections when present; pass `&ReportInputs::default()` for a
+/// bare single-session report.
+pub fn render(artifact: &ClsArtifact, inputs: &ReportInputs) -> String {
     let mut sections = String::new();
     sections.push_str(&metadata_section(&artifact.session));
-    if let Some(d) = diff {
+    if let Some(d) = inputs.diff {
         sections.push_str(&ir_diff_section(d));
     }
     sections.push_str(&recompile_section(artifact));
     sections.push_str(&cache_stability_section(artifact));
     sections.push_str(&divergence_section(artifact));
+    sections.push_str(&lint_section(artifact, inputs.lint));
     sections.push_str(&fusion_section(artifact));
+    sections.push_str(&roofline_section(inputs.roofline));
     sections.push_str(&raw_section(artifact));
     document(&artifact.session, &sections)
 }
@@ -250,6 +269,157 @@ fn modified_table(diff: &IrGraphDiff) -> String {
 /// Format a `[0, 1]` ratio as a whole-number percentage.
 fn pct(v: f64) -> String {
     format!("{:.0}%", v * 100.0)
+}
+
+/// Tool 4 lint. With a correctness DB the CLI escalates candidates to severity-rated findings and
+/// passes them in (`Some`); without one, this falls back to the artifact's **raw candidates** and
+/// says how to escalate — honest degradation, never a fabricated severity.
+fn lint_section(artifact: &ClsArtifact, lint: Option<&LintReport>) -> String {
+    match lint {
+        Some(report) if report.findings.is_empty() => section(
+            "lint",
+            "Lint (Tool 4)",
+            "<p class=\"good\">No correctness-lint findings survived escalation against the \
+             database.</p>",
+        ),
+        Some(report) => {
+            let mut body = String::from(
+                "<p class=\"muted\">Static-scan candidates escalated against the correctness \
+                 database — each carries a cited issue (lint-not-oracle).</p>\n\
+                 <table>\n<thead><tr><th>severity</th><th>pattern</th><th>location</th>\
+                 <th>issue</th><th>workaround</th></tr></thead>\n<tbody>\n",
+            );
+            for f in &report.findings {
+                body.push_str(&format!(
+                    "<tr><td>{}</td><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+                    severity_badge(&f.severity),
+                    esc(&f.pattern_category),
+                    location(f.source_location.as_ref()),
+                    issue_ref(f.reference_issue.as_ref()),
+                    esc(f.workaround.as_deref().unwrap_or("—")),
+                ));
+            }
+            body.push_str("</tbody>\n</table>\n");
+            section("lint", "Lint (Tool 4)", &body)
+        }
+        None if artifact.lint_findings.is_empty() => section(
+            "lint",
+            "Lint (Tool 4)",
+            "<p class=\"good\">No lint candidates from the static scan.</p>",
+        ),
+        None => {
+            let mut body = format!(
+                "<p class=\"warn\">{} candidate pattern(s) from the static scan — not yet \
+                 escalated. Pass <code>--db &lt;correctness.toml&gt;</code> to rate severity and \
+                 attach issue links.</p>\n\
+                 <table>\n<thead><tr><th>pattern</th><th>location</th><th>trigger</th>\
+                 <th>confidence</th></tr></thead>\n<tbody>\n",
+                artifact.lint_findings.len(),
+            );
+            for c in &artifact.lint_findings {
+                body.push_str(&format!(
+                    "<tr><td><code>{}</code></td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>\n",
+                    esc(&c.pattern_category),
+                    location(c.source_location.as_ref()),
+                    esc(c.trigger_pattern.as_deref().unwrap_or("—")),
+                    esc(c.confidence.as_deref().unwrap_or("—")),
+                ));
+            }
+            body.push_str("</tbody>\n</table>\n");
+            section("lint", "Lint (Tool 4)", &body)
+        }
+    }
+}
+
+/// Tool 5 roofline. Always computed against a GPU (the CLI defaults to the project baseline), so the
+/// report shows real numbers out of the box; `None` only when the analysis was not run.
+fn roofline_section(roofline: Option<&RooflineReport>) -> String {
+    let Some(report) = roofline else {
+        return section(
+            "roofline",
+            "Roofline (Tool 5)",
+            "<p class=\"muted\">Roofline not computed.</p>",
+        );
+    };
+    if report.predictions.is_empty() {
+        return section(
+            "roofline",
+            "Roofline (Tool 5)",
+            &format!(
+                "<p class=\"muted\">No kernel carried the flops/bytes features the roofline model \
+                 needs (GPU: <code>{}</code>).</p>",
+                esc(&report.gpu),
+            ),
+        );
+    }
+    let mut body = format!(
+        "<p class=\"muted\">Williams roofline + empirical predictor per kernel, against \
+         <code>{}</code>.</p>\n\
+         <table>\n<thead><tr><th>kernel</th><th>intensity (FLOP/B)</th><th>bound</th>\
+         <th>predicted µs</th><th>measured µs</th></tr></thead>\n<tbody>\n",
+        esc(&report.gpu),
+    );
+    for p in &report.predictions {
+        body.push_str(&format!(
+            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+            esc(&p.kernel_id),
+            num1(p.arithmetic_intensity),
+            esc(p.bound_type.as_deref().unwrap_or("—")),
+            num1(p.empirical_predictor_us),
+            num1(p.measured_us),
+        ));
+    }
+    body.push_str("</tbody>\n</table>\n");
+    if let Some(verdict) = report
+        .calibration
+        .as_ref()
+        .and_then(|c| c.calibration_verdict.as_deref())
+    {
+        body.push_str(&format!(
+            "<p class=\"muted\">calibration: {}</p>\n",
+            esc(verdict)
+        ));
+    }
+    section("roofline", "Roofline (Tool 5)", &body)
+}
+
+/// `high` reads as a warning, `info` as muted; anything else passes through escaped.
+fn severity_badge(severity: &str) -> String {
+    match severity {
+        "high" => "<strong class=\"warn\">high</strong>".to_string(),
+        "info" => "<span class=\"muted\">info</span>".to_string(),
+        other => esc(other),
+    }
+}
+
+/// A `file:line` location as inline code, or `—` when absent.
+fn location(loc: Option<&cls_schema::SourceRange>) -> String {
+    match loc {
+        Some(r) => {
+            let file = esc(r.file.as_deref().unwrap_or("?"));
+            match r.line_start {
+                Some(line) => format!("<code>{file}:{line}</code>"),
+                None => format!("<code>{file}</code>"),
+            }
+        }
+        None => "—".to_string(),
+    }
+}
+
+/// The reference issue URL as inert escaped text (a live link awaits the URL allowlist), or `—`.
+fn issue_ref(issue: Option<&cls_schema::ReferenceIssue>) -> String {
+    match issue.and_then(|i| i.url.as_deref()) {
+        Some(url) => format!("<code>{}</code>", esc(url)),
+        None => "—".to_string(),
+    }
+}
+
+/// A microsecond figure to one decimal, or `—` when not measured/predicted.
+fn num1(v: Option<f64>) -> String {
+    match v {
+        Some(x) => format!("{x:.1}"),
+        None => "—".to_string(),
+    }
 }
 
 fn cache_stability_section(artifact: &ClsArtifact) -> String {

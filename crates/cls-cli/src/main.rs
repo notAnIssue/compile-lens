@@ -244,6 +244,13 @@ enum SessionCommand {
         /// IR Diff (base → head) section — the regression view of what the change altered.
         #[arg(long, value_name = "PATH")]
         base: Option<std::path::PathBuf>,
+        /// GPU to compute the roofline section against. Defaults to the project baseline.
+        #[arg(long, default_value = "A100-SXM-80GB")]
+        gpu: String,
+        /// Optional correctness database. When given, lint candidates are escalated to
+        /// severity-rated findings with issue links; without it the report shows raw candidates.
+        #[arg(long, value_name = "PATH")]
+        db: Option<std::path::PathBuf>,
         /// Where to write the HTML. Defaults to stdout.
         #[arg(short, long, value_name = "PATH")]
         output: Option<std::path::PathBuf>,
@@ -401,8 +408,10 @@ fn run(cli: Cli) -> Result<(), ClsError> {
             SessionCommand::Report {
                 session,
                 base,
+                gpu,
+                db,
                 output,
-            } => session_report(session, base, output),
+            } => session_report(session, base, gpu, db, output),
         },
 
         None => Ok(()),
@@ -413,9 +422,15 @@ fn run(cli: Cli) -> Result<(), ClsError> {
 /// Reads + version-gates the artifact (the shared loader), renders via `cls-report`, and writes the
 /// HTML to `--output` or stdout. Pure Rust: the Python `cl.session()` controls collection; this
 /// renders what it wrote, the data crossing as the `.cls.json` file (ADR-006), never FFI.
+/// Pruning target for the report's roofline section. The section is informational, not an autotune
+/// gate, so this figure only shapes the Layer-3 pruning line when measurements are present.
+const REPORT_ROOFLINE_TOP_K: usize = 8;
+
 fn session_report(
     session: std::path::PathBuf,
     base: Option<std::path::PathBuf>,
+    gpu: String,
+    db: Option<std::path::PathBuf>,
     output: Option<std::path::PathBuf>,
 ) -> Result<(), ClsError> {
     let artifact = cls_schema_migrate::load_artifact(&session)?;
@@ -431,7 +446,24 @@ fn session_report(
         }
         None => None,
     };
-    let html = cls_report::render(&artifact, diff.as_ref());
+    // Lint escalates only with a `--db`; without one the renderer shows the raw candidates and how
+    // to escalate (an empty DB would silently drop every candidate, so we don't analyze at all).
+    let lint = match db.as_deref() {
+        Some(path) => {
+            let pattern_db = load_pattern_db(Some(path))?;
+            Some(cls_analyzer::lint::analyze(&artifact, &pattern_db))
+        }
+        None => None,
+    };
+    // Roofline is always computed against `--gpu` (default = project baseline), so the section shows
+    // real numbers by default; an unknown GPU name errors here rather than silently dropping it.
+    let roofline = cls_analyzer::roofline::analyze(&artifact, &gpu, REPORT_ROOFLINE_TOP_K)?;
+    let inputs = cls_report::ReportInputs {
+        diff: diff.as_ref(),
+        lint: lint.as_ref(),
+        roofline: Some(&roofline),
+    };
+    let html = cls_report::render(&artifact, &inputs);
     match output {
         Some(path) => {
             std::fs::write(&path, html).map_err(|source| ClsError::IoError {
