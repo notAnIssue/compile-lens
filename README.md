@@ -31,6 +31,22 @@ It **wraps** the official PyTorch tooling rather than re-implementing it, and is
 
 ---
 
+## Architecture
+
+Python captures (it is the only side that touches `torch.compile`); Rust analyzes and renders. The two hand off a versioned `.cls.json` file over a subprocess — never shared memory — so each side evolves independently and every run reproduces from its artifact.
+
+```mermaid
+flowchart LR
+    sess["cl.session()<br/>(Python capture)"] --> art[".cls.json<br/>schema contract"]
+    art --> an["Rust analyzers<br/>Tools 1–6"]
+    an --> report["cls-report<br/>→ HTML"]
+    report --> scrub["cl scrub<br/>→ share-safe"]
+```
+
+Full diagrams (data flow, schema ER, roadmap) in [`docs/01_architecture.md`](./docs/01_architecture.md).
+
+---
+
 ## Quick example
 
 ```python
