@@ -14,6 +14,7 @@
 //!
 //! Spec: `docs/06_security/redaction_policy.md`.
 
+pub mod html;
 pub mod rules;
 
 use cls_errors::ClsError;

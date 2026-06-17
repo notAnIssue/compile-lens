@@ -182,21 +182,20 @@ fn verify_passes_after_scrub_exit_zero() {
 }
 
 #[test]
-fn html_input_is_not_yet_implemented_exit_thirteen() {
-    // HTML report sanitization is a separate path; routing it here returns CLS-E0011, exit 13.
-    let path = write_temp("report.html", "<html></html>");
-    let out = cl()
-        .arg("scrub")
-        .arg(&path)
-        .stderr(Stdio::piped())
-        .output()
-        .expect("spawn cl");
-    let _ = std::fs::remove_file(&path);
+fn html_input_is_sanitized_in_place() {
+    // An HTML report with no CSP and a script tag gets the strict CSP added and the script made
+    // inert.
+    let evil = "<html><head><title>r</title></head><body><script>steal()</script></body></html>";
+    let path = write_temp("report.html", evil);
+    let out = cl().arg("scrub").arg(&path).output().expect("spawn cl");
+    assert!(out.status.success(), "exit: {:?}", out.status.code());
 
-    assert_eq!(
-        out.status.code(),
-        Some(13),
-        "expected exit 13 (CLS-E0011); stderr:\n{}",
-        String::from_utf8_lossy(&out.stderr),
+    let scrubbed = std::fs::read_to_string(&path).expect("read back");
+    let _ = std::fs::remove_file(&path);
+    assert!(scrubbed.contains("default-src 'none'"), "CSP added");
+    assert!(
+        !scrubbed.contains("<script"),
+        "script neutralized: {scrubbed}"
     );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("CSP added"));
 }
