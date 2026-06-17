@@ -6,18 +6,25 @@
 //! **fresh HTML** from the structured findings (not the markdown renderers), so every
 //! user-controlled string is escaped with [`esc`] at the point it enters the document.
 //!
-//! Sections so far: session metadata, recompile summary, divergence (eager vs compiled, surfacing a
+//! Sections: session metadata, the base→head IR diff (Tool 2a, present only when a baseline is
+//! given), recompile summary, cache stability (Tool 2b), divergence (eager vs compiled, surfacing a
 //! NaN `max_abs_diff` as the headline signal per ADR-039), fusion opportunities (CODA crown-jewel),
-//! and a raw-artifacts footer. The remaining tool sections (compile-diff / cache-stability / lint /
-//! roofline) and the security hardening (an `ammonia` allowlist + an XSS payload corpus + a CSP
-//! header + a URL allowlist) land in later changes.
+//! and a raw-artifacts footer. The remaining tool sections (lint / roofline) land in later changes;
+//! the XSS hardening (a payload corpus + a CSP header) is in place.
 
 use cls_schema::{ClsArtifact, Session};
+// Re-exported: `render` takes it, so callers (the CLI, tests) need to name it.
+pub use cls_wl_diff::IrGraphDiff;
 
-/// Render a session artifact into a self-contained HTML report.
-pub fn render(artifact: &ClsArtifact) -> String {
+/// Render a session artifact into a self-contained HTML report. In `--base` mode the caller passes
+/// the base→head compile diff, which renders as the pillar IR Diff section; pass `None` for a
+/// single-session report (the section is then omitted entirely).
+pub fn render(artifact: &ClsArtifact, diff: Option<&IrGraphDiff>) -> String {
     let mut sections = String::new();
     sections.push_str(&metadata_section(&artifact.session));
+    if let Some(d) = diff {
+        sections.push_str(&ir_diff_section(d));
+    }
     sections.push_str(&recompile_section(artifact));
     sections.push_str(&cache_stability_section(artifact));
     sections.push_str(&divergence_section(artifact));
@@ -26,9 +33,9 @@ pub fn render(artifact: &ClsArtifact) -> String {
     document(&artifact.session, &sections)
 }
 
-/// Escape the five HTML-significant characters in a user-controlled string. The full XSS pass (an
-/// `ammonia` allowlist + a payload corpus + a CSP header) lands in a later change; escaping here
-/// keeps every interpolated string correct-by-default in the meantime.
+/// Escape the five HTML-significant characters in a user-controlled string. This is the report's
+/// XSS front line: the renderer emits fresh HTML and never keeps user HTML, so every interpolated
+/// string passes through here. A payload corpus and a strict CSP back it up (see the XSS tests).
 pub fn esc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -161,6 +168,88 @@ fn recompile_section(artifact: &ClsArtifact) -> String {
         body.push_str("</ol>\n");
     }
     section("recompile", "Recompile summary", &body)
+}
+
+/// The base→head compile diff (Tool 2a) — the report's pillar in `--base` mode. Renders the added /
+/// removed / modified nodes plus two quality gauges (match coverage, anchor uniqueness) so the
+/// reader can weigh how much to trust the structural verdict.
+fn ir_diff_section(diff: &IrGraphDiff) -> String {
+    let (added, removed, modified) = (diff.added.len(), diff.removed.len(), diff.modified.len());
+    let headline = if added == 0 && removed == 0 && modified == 0 {
+        "<p class=\"good\">No structural change — the compiled graph is identical between base and \
+         head.</p>"
+            .to_string()
+    } else {
+        format!(
+            "<p class=\"warn\">The compiled graph changed: <strong>{added}</strong> added, \
+             <strong>{removed}</strong> removed, <strong>{modified}</strong> modified node(s).</p>"
+        )
+    };
+    let mut quality = String::from("<dl class=\"meta\">");
+    quality.push_str(&row("match coverage", Some(&pct(diff.match_coverage))));
+    quality.push_str(&row(
+        "anchor uniqueness",
+        Some(&pct(diff.anchor_uniqueness_ratio)),
+    ));
+    quality.push_str("</dl>");
+    let lists = format!(
+        "{}{}{}",
+        node_list("added", &diff.added),
+        node_list("removed", &diff.removed),
+        modified_table(diff),
+    );
+    section(
+        "ir-diff",
+        "IR Diff (base → head)",
+        &format!("{headline}{quality}{lists}"),
+    )
+}
+
+/// A `<ul>` of node ids under an `<h3>` count heading, or nothing when the slice is empty.
+fn node_list(label: &str, nodes: &[String]) -> String {
+    if nodes.is_empty() {
+        return String::new();
+    }
+    let items: String = nodes
+        .iter()
+        .map(|n| format!("<li><code>{}</code></li>", esc(n)))
+        .collect();
+    format!(
+        "<h3>{} ({})</h3>\n<ul>{items}</ul>\n",
+        esc(label),
+        nodes.len()
+    )
+}
+
+/// Modified `(base, head)` pairs as a table, annotated with the matcher's `[0, 1]` confidence.
+fn modified_table(diff: &IrGraphDiff) -> String {
+    if diff.modified.is_empty() {
+        return String::new();
+    }
+    let confidence: std::collections::HashMap<&str, f64> = diff
+        .matched
+        .iter()
+        .map(|(base, _head, c)| (base.as_str(), *c))
+        .collect();
+    let mut rows = String::new();
+    for (base, head) in &diff.modified {
+        let c = confidence.get(base.as_str()).copied().unwrap_or(0.0);
+        rows.push_str(&format!(
+            "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{c:.2}</td></tr>\n",
+            esc(base),
+            esc(head),
+        ));
+    }
+    format!(
+        "<h3>modified ({})</h3>\n<table>\n<thead><tr><th>base</th><th>head</th>\
+         <th>confidence</th></tr></thead>\n<tbody>\n{rows}</tbody>\n</table>\n",
+        diff.modified.len(),
+    )
+}
+
+/// Format a `[0, 1]` ratio as a whole-number percentage.
+fn pct(v: f64) -> String {
+    format!("{:.0}%", v * 100.0)
 }
 
 fn cache_stability_section(artifact: &ClsArtifact) -> String {
@@ -317,4 +406,6 @@ th{color:#666;font-weight:600}\
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em}\
 .muted{color:#888;font-size:.9rem}\
 .good{color:#1a7f37}\
+.warn{color:#9a6700}\
+h3{font-size:.95rem;margin:.8rem 0 .3rem;color:#444}\
 ";

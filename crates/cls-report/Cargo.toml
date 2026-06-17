@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 cls-analyzer = { path = "../cls-analyzer" }
 cls-schema = { path = "../cls-schema" }
+cls-wl-diff = { path = "../cls-wl-diff" }
 
 [dev-dependencies]
 serde_json = "1"
