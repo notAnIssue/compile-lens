@@ -104,3 +104,30 @@ fn empty_sections_say_so_rather_than_placeholder() {
     assert!(html.contains("No divergence findings"));
     assert!(html.contains("No algebraic fusion opportunities"));
 }
+
+/// A committed fixture under the repo's top-level `tests/fixtures/`.
+fn repo_fixture(rel: &str) -> ClsArtifact {
+    let path = format!("{}/../../{}", env!("CARGO_MANIFEST_DIR"), rel);
+    from_json(&std::fs::read_to_string(path).expect("read fixture"))
+}
+
+#[test]
+fn cache_stability_section_renders_a_silently_stale_finding() {
+    // listing2 = Li et al. Listing 2 — a silently-stale cache (state drifts, graph reused, output
+    // frozen).
+    let html = cls_report::render(&repo_fixture(
+        "tests/fixtures/cache_stability/listing2.cls.json",
+    ));
+    assert!(html.contains("Cache stability"));
+    assert!(
+        html.contains("drifted attrs"),
+        "findings table should render: {html}"
+    );
+}
+
+#[test]
+fn cache_stability_section_reports_stable_when_no_iterations() {
+    let html = cls_report::render(&from_json(MINIMAL_SESSION));
+    assert!(html.contains("Cache stability"));
+    assert!(html.contains("No silently-stale-cache"));
+}

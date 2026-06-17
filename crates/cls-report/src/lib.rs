@@ -19,6 +19,7 @@ pub fn render(artifact: &ClsArtifact) -> String {
     let mut sections = String::new();
     sections.push_str(&metadata_section(&artifact.session));
     sections.push_str(&recompile_section(artifact));
+    sections.push_str(&cache_stability_section(artifact));
     sections.push_str(&divergence_section(artifact));
     sections.push_str(&fusion_section(artifact));
     sections.push_str(&raw_section(artifact));
@@ -160,6 +161,35 @@ fn recompile_section(artifact: &ClsArtifact) -> String {
         body.push_str("</ol>\n");
     }
     section("recompile", "Recompile summary", &body)
+}
+
+fn cache_stability_section(artifact: &ClsArtifact) -> String {
+    let findings = cls_analyzer::cache_stability::analyze(artifact);
+    if findings.findings.is_empty() {
+        return section(
+            "cache-stability",
+            "Cache stability",
+            "<p class=\"good\">No silently-stale-cache findings — recompilation tracked the state \
+             changes.</p>",
+        );
+    }
+    let mut body = String::from(
+        "<p class=\"muted\">Iterations where module state drifted but the compiled graph was reused \
+         and the output stayed frozen — the cache key missed the state change (Tool 2b).</p>\n\
+         <table>\n<thead><tr><th>severity</th><th>iteration</th><th>drifted attrs</th>\
+         <th>reference</th></tr></thead>\n<tbody>\n",
+    );
+    for f in &findings.findings {
+        // Severity has a single variant (High) by construction; render it directly.
+        body.push_str(&format!(
+            "<tr><td><strong>high</strong></td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>\n",
+            f.iteration_index,
+            esc(&f.changed_attrs.join(", ")),
+            esc(&f.reference),
+        ));
+    }
+    body.push_str("</tbody>\n</table>\n");
+    section("cache-stability", "Cache stability", &body)
 }
 
 fn divergence_section(artifact: &ClsArtifact) -> String {
