@@ -274,3 +274,61 @@ fn roofline_section_absent_says_not_computed() {
     assert!(html.contains("Roofline (Tool 5)"));
     assert!(html.contains("Roofline not computed"));
 }
+
+/// An escalated lint report carrying a single finding whose issue URL is `url`.
+fn lint_report_with_issue_url(url: &str) -> cls_analyzer::lint::LintReport {
+    cls_analyzer::lint::LintReport {
+        findings: vec![cls_schema::LintFinding {
+            finding_id: "l1".into(),
+            pattern_category: "inplace_on_alias".into(),
+            severity: "high".into(),
+            source_location: None,
+            trigger_pattern: None,
+            li_et_al_section: None,
+            reference_issue: Some(cls_schema::ReferenceIssue {
+                url: Some(url.into()),
+                fixed_in_version: None,
+            }),
+            workaround: None,
+            confidence: None,
+            applies_to_user_torch_version: Some(true),
+        }],
+    }
+}
+
+fn render_with_lint(report: &cls_analyzer::lint::LintReport) -> String {
+    cls_report::render(
+        &from_json(MINIMAL_SESSION),
+        &cls_report::ReportInputs {
+            lint: Some(report),
+            ..Default::default()
+        },
+    )
+}
+
+#[test]
+fn issue_url_on_the_allowlist_becomes_a_link() {
+    let report = lint_report_with_issue_url("https://github.com/pytorch/pytorch/issues/12345");
+    let html = render_with_lint(&report);
+    assert!(
+        html.contains("<a href=\"https://github.com/pytorch/pytorch/issues/12345\">"),
+        "allowlisted issue should link: {html}"
+    );
+}
+
+#[test]
+fn issue_url_off_the_allowlist_stays_inert() {
+    // An arbitrary host, a non-https scheme, and a javascript: URI must never become anchors.
+    for url in [
+        "javascript:alert(1)",
+        "https://evil.example/pwn",
+        "http://github.com/pytorch/x",
+    ] {
+        let html = render_with_lint(&lint_report_with_issue_url(url));
+        assert!(!html.contains("<a href"), "must not link {url}: {html}");
+        assert!(
+            html.contains(&cls_report::esc(url)),
+            "url still shown inert: {url}"
+        );
+    }
+}
