@@ -51,13 +51,15 @@ fn check_json(name: &str) {
 
     let after_path = dir.join("after").join(name);
     if blessing() {
-        std::fs::write(&after_path, &scrubbed).expect("write golden");
+        // Newline-terminated so the golden file satisfies the repo's end-of-file-fixer hook.
+        std::fs::write(&after_path, format!("{scrubbed}\n")).expect("write golden");
         return;
     }
 
     let expected = std::fs::read_to_string(&after_path).expect("read golden after/ file");
     assert_eq!(
-        scrubbed, expected,
+        scrubbed,
+        expected.trim_end_matches('\n'),
         "{name}: scrub output drifted from the committed after/ golden file"
     );
     // The scrubbed artifact must actually be share-safe for the level it was scrubbed to.
@@ -92,11 +94,19 @@ fn corpus_html_xss_vectors() {
 
     let after_path = dir.join("after").join(name);
     if blessing() {
-        std::fs::write(&after_path, &scrubbed).expect("write golden");
+        std::fs::write(
+            &after_path,
+            format!("{}\n", scrubbed.trim_end_matches('\n')),
+        )
+        .expect("write golden");
         return;
     }
     let expected = std::fs::read_to_string(&after_path).expect("read golden after/ file");
-    assert_eq!(scrubbed, expected, "{name}: html scrub drifted from golden");
+    assert_eq!(
+        scrubbed.trim_end_matches('\n'),
+        expected.trim_end_matches('\n'),
+        "{name}: html scrub drifted from golden"
+    );
     // Re-scrubbing the cleaned report is a fixed point.
     let (twice, stats) = cls_scrub::html::scrub_html(&scrubbed);
     assert!(
