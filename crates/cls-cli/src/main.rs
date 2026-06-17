@@ -895,16 +895,14 @@ fn scrub(
     dry_run: bool,
     strict: bool,
 ) -> Result<(), ClsError> {
-    // HTML report sanitization is a separate path (it re-runs the XSS escape + URL allowlist,
-    // not the JSON field rules); this handler only takes `.cls.json` artifacts.
+    // An HTML report takes a different path: it ensures the strict CSP, re-scrubs leaked tokens,
+    // and neutralizes dangerous constructs — not the JSON field rules. (Redaction levels don't
+    // apply to rendered HTML, so `--to` / `--strict` are ignored here.)
     if file
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("html"))
     {
-        return Err(ClsError::NotYetImplemented {
-            surface: "cl scrub <report.html>".into(),
-            tracking: "HTML report re-sanitization lands in a follow-up".into(),
-        });
+        return scrub_html_file(file, output, dry_run);
     }
 
     let mut artifact = cls_schema_migrate::load_artifact(&file)?;
@@ -939,6 +937,68 @@ fn scrub(
     })?;
     println!("✅ wrote {} ({level}: {summary})", dest.display());
     Ok(())
+}
+
+/// `cl scrub <report.html>` — sanitize an HTML report for sharing: ensure the strict CSP, re-scrub
+/// leaked secret tokens, neutralize any literal `<script>` / `on*=` / `javascript:`. Writes in
+/// place or to `--output`; `--dry-run` reports without writing.
+fn scrub_html_file(
+    file: std::path::PathBuf,
+    output: Option<std::path::PathBuf>,
+    dry_run: bool,
+) -> Result<(), ClsError> {
+    let html = std::fs::read_to_string(&file).map_err(|source| ClsError::IoError {
+        path: file.display().to_string(),
+        source,
+    })?;
+    let (sanitized, stats) = cls_scrub::html::scrub_html(&html);
+    let summary = format_html_summary(&stats);
+
+    if dry_run {
+        println!("would scrub {} ({summary})", file.display());
+        return Ok(());
+    }
+
+    let dest = output.as_deref().unwrap_or(&file);
+    std::fs::write(dest, sanitized).map_err(|source| ClsError::IoError {
+        path: dest.display().to_string(),
+        source,
+    })?;
+    println!("✅ wrote {} ({summary})", dest.display());
+    Ok(())
+}
+
+/// One-line summary of an HTML scrub, listing only what changed.
+fn format_html_summary(stats: &cls_scrub::html::HtmlScrubStats) -> String {
+    if stats.is_noop() {
+        return "already share-safe".to_string();
+    }
+    let mut parts = Vec::new();
+    if stats.csp_added {
+        parts.push("CSP added".to_string());
+    }
+    if stats.tokens_scrubbed {
+        parts.push("tokens scrubbed".to_string());
+    }
+    if stats.scripts_neutralized > 0 {
+        parts.push(format!(
+            "{} script tag(s) neutralized",
+            stats.scripts_neutralized
+        ));
+    }
+    if stats.handlers_neutralized > 0 {
+        parts.push(format!(
+            "{} event handler(s) removed",
+            stats.handlers_neutralized
+        ));
+    }
+    if stats.js_uris_neutralized > 0 {
+        parts.push(format!(
+            "{} javascript: URI(s) blocked",
+            stats.js_uris_neutralized
+        ));
+    }
+    parts.join(", ")
 }
 
 /// `cl scrub --verify <file> [--target LEVEL]` — audit whether the artifact already meets a
