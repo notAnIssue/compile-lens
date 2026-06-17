@@ -238,8 +238,12 @@ enum Command {
 enum SessionCommand {
     /// Render a session's `.cls.json` into the self-contained HTML report.
     Report {
-        /// The `.cls.json` artifact to render.
+        /// The `.cls.json` artifact to render (the "head" session in diff mode).
         session: std::path::PathBuf,
+        /// Optional earlier `.cls.json` to diff against. When given, the report leads with an
+        /// IR Diff (base → head) section — the regression view of what the change altered.
+        #[arg(long, value_name = "PATH")]
+        base: Option<std::path::PathBuf>,
         /// Where to write the HTML. Defaults to stdout.
         #[arg(short, long, value_name = "PATH")]
         output: Option<std::path::PathBuf>,
@@ -394,7 +398,11 @@ fn run(cli: Cli) -> Result<(), ClsError> {
         }) => migrate(input, output, dry_run),
 
         Some(Command::Session { action }) => match action {
-            SessionCommand::Report { session, output } => session_report(session, output),
+            SessionCommand::Report {
+                session,
+                base,
+                output,
+            } => session_report(session, base, output),
         },
 
         None => Ok(()),
@@ -407,10 +415,23 @@ fn run(cli: Cli) -> Result<(), ClsError> {
 /// renders what it wrote, the data crossing as the `.cls.json` file (ADR-006), never FFI.
 fn session_report(
     session: std::path::PathBuf,
+    base: Option<std::path::PathBuf>,
     output: Option<std::path::PathBuf>,
 ) -> Result<(), ClsError> {
     let artifact = cls_schema_migrate::load_artifact(&session)?;
-    let html = cls_report::render(&artifact);
+    // In `--base` mode, compute the base→head compile diff (Tool 2a) and render it as the pillar
+    // IR Diff section. We diff the first compiled graph on each side, matching `cl diff`; an
+    // artifact with no compiled graph diffs as an empty graph rather than erroring.
+    let diff = match &base {
+        Some(base_path) => {
+            let base_artifact = cls_schema_migrate::load_artifact(base_path)?;
+            let before = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&base_artifact));
+            let after = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&artifact));
+            Some(cls_wl_diff::diff_graphs(&before, &after))
+        }
+        None => None,
+    };
+    let html = cls_report::render(&artifact, diff.as_ref());
     match output {
         Some(path) => {
             std::fs::write(&path, html).map_err(|source| ClsError::IoError {

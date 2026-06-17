@@ -282,6 +282,7 @@ version = "0.5.0"
 dependencies = [
  "cls-analyzer",
  "cls-schema",
+ "cls-wl-diff",
  "serde_json",
 ]
 
