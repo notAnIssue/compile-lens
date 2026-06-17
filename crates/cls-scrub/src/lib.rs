@@ -41,6 +41,22 @@ pub fn is_strict(policy: RedactionPolicy) -> bool {
     )
 }
 
+/// The stricter (more redacted) of two policies. Used to pick a default scrub target that is
+/// "at least `default-strict`" without ever demoting an artifact that is already stricter.
+pub fn stricter_of(a: RedactionPolicy, b: RedactionPolicy) -> RedactionPolicy {
+    if strictness(a) >= strictness(b) {
+        a
+    } else {
+        b
+    }
+}
+
+/// The kebab-case wire label for a policy. Public so callers (the `cl scrub` CLI) print the same
+/// level names the user types as `--to`, and `CLS-E0009` messages read like the CLI flag.
+pub fn level_name(policy: RedactionPolicy) -> &'static str {
+    label(policy)
+}
+
 /// The kebab-case wire label for a policy (used in `CLS-E0009` messages so they read like the
 /// CLI flag the user would type).
 fn label(policy: RedactionPolicy) -> &'static str {
@@ -134,15 +150,15 @@ pub fn redact_artifact(
             stats.env_vars_dropped += before - env.relevant_env_vars.len();
         }
 
+        // ── compiled-graph artifact paths (§2.1) ──
+        for graph in artifact.compiled_graphs.iter_mut() {
+            normalize_field(&mut graph.fx_graph_path, repo, public_safe, &mut stats)?;
+            normalize_field(&mut graph.inductor_ir_path, repo, public_safe, &mut stats)?;
+        }
+
         // ── kernel paths + sources (§2.1 / §2.4) ──
         for kernel in artifact.kernels.iter_mut() {
-            if let Some(path) = kernel.source_path.as_ref() {
-                let normalized = rules::normalize_path(path, repo, public_safe)?;
-                if &normalized != path {
-                    stats.paths_normalized += 1;
-                }
-                kernel.source_path = Some(normalized);
-            }
+            normalize_field(&mut kernel.source_path, repo, public_safe, &mut stats)?;
             // PTX and kernel source are model IP — always omitted under a share-safe level.
             if kernel.ptx_path.take().is_some() {
                 stats.kernel_sources_removed += 1;
@@ -155,13 +171,7 @@ pub fn redact_artifact(
         // ── lint finding source locations (§2.1 / §2.3) ──
         for finding in artifact.lint_findings.iter_mut() {
             if let Some(loc) = finding.source_location.as_mut() {
-                if let Some(file) = loc.file.as_ref() {
-                    let normalized = rules::normalize_path(file, repo, public_safe)?;
-                    if &normalized != file {
-                        stats.paths_normalized += 1;
-                    }
-                    loc.file = Some(normalized);
-                }
+                normalize_field(&mut loc.file, repo, public_safe, &mut stats)?;
                 if loc.code_excerpt.take().is_some() {
                     stats.source_excerpts_removed += 1;
                 }
@@ -171,6 +181,26 @@ pub fn redact_artifact(
 
     artifact.session.redaction_policy = target;
     Ok(stats)
+}
+
+/// Normalize one optional path field in place, bumping `stats.paths_normalized` when the value
+/// actually changed. Every path-bearing field in the artifact (graph paths, kernel source paths,
+/// lint file locations) routes through this one helper so they all get the same rule and the same
+/// `CLS-E0008` credential-dir refusal, rather than re-deriving it per call site.
+fn normalize_field(
+    field: &mut Option<String>,
+    repo: Option<&str>,
+    public_safe: bool,
+    stats: &mut RedactionStats,
+) -> Result<(), ClsError> {
+    if let Some(path) = field.as_ref() {
+        let normalized = rules::normalize_path(path, repo, public_safe)?;
+        if &normalized != path {
+            stats.paths_normalized += 1;
+        }
+        *field = Some(normalized);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -291,6 +321,38 @@ mod tests {
             artifact.session.command.is_none(),
             "public-safe nulls the command"
         );
+    }
+
+    #[test]
+    fn promote_to_public_safe_normalizes_compiled_graph_paths() {
+        // A compiled-graph path is path-bearing too (matches the Python collector, which
+        // normalizes fx_graph_path / inductor_ir_path). public-safe's {home}/ catch-all
+        // anonymizes it even when repo detection can't match the basename.
+        let json = r#"{
+          "schema_version": "0.5.0",
+          "session": {
+            "id": "00000000-0000-4000-8000-000000000000",
+            "timestamp": "2026-06-17T00:00:00Z", "torch_version": "2.11.0",
+            "redaction_policy": "confidential"
+          },
+          "compiled_graphs": [{
+            "graph_id": "g0",
+            "fx_graph_path": "/home/jdoe/secret-project/fx.txt",
+            "inductor_ir_path": "/home/jdoe/secret-project/ir.txt"
+          }]
+        }"#;
+        let mut artifact: ClsArtifact = serde_json::from_str(json).unwrap();
+        redact_artifact(&mut artifact, RedactionPolicy::PublicSafe, "salt", false).unwrap();
+        let g = &artifact.compiled_graphs[0];
+        assert_eq!(
+            g.fx_graph_path.as_deref().unwrap(),
+            "{home}/secret-project/fx.txt"
+        );
+        assert_eq!(
+            g.inductor_ir_path.as_deref().unwrap(),
+            "{home}/secret-project/ir.txt"
+        );
+        assert!(!g.fx_graph_path.as_deref().unwrap().contains("jdoe"));
     }
 
     #[test]
