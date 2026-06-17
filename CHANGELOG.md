@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `examples/` — a reproducible hero-report demo. `examples/hero_scene.py` captures a base/head pair
+  (three `GEMM-Residual-RMSNorm-GEMM` blocks + an affine tail whose subtraction operands are flipped
+  in the head — a silent sign bug); the committed, `public-safe`-scrubbed artifacts render a single
+  report showing both the IR-diff pillar (the swap recovered as one `modified` node at 100%
+  confidence) and the CODA fusion crown jewel (three `Pattern A` opportunities). Re-rendering needs
+  no PyTorch; re-capturing does.
+
 ### Fixed
 
 - The hero report's CODA fusion section now runs the Tool 6 analyzer instead of reading a stored
