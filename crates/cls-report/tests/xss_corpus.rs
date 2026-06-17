@@ -52,7 +52,7 @@ fn in_divergence_cause(p: &str) -> ClsArtifact {
 fn no_corpus_payload_survives_as_live_markup() {
     for &p in PAYLOADS {
         for artifact in [in_torch_version(p), in_divergence_cause(p)] {
-            let html = cls_report::render(&artifact, None);
+            let html = cls_report::render(&artifact, &cls_report::ReportInputs::default());
             let escaped = cls_report::esc(p);
             // The payload appears only in its escaped form.
             assert!(
@@ -75,7 +75,10 @@ fn no_corpus_payload_survives_as_live_markup() {
 
 #[test]
 fn report_carries_a_strict_csp() {
-    let html = cls_report::render(&in_torch_version("2.6.0"), None);
+    let html = cls_report::render(
+        &in_torch_version("2.6.0"),
+        &cls_report::ReportInputs::default(),
+    );
     assert!(html.contains("Content-Security-Policy"), "CSP meta missing");
     assert!(html.contains("default-src 'none'"), "CSP must default-deny");
     assert!(
