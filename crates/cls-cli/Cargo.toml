@@ -18,6 +18,7 @@ cls-report = { path = "../cls-report" }
 cls-sarif = { path = "../cls-sarif" }
 cls-schema = { path = "../cls-schema" }
 cls-schema-migrate = { path = "../cls-schema-migrate" }
+cls-scrub = { path = "../cls-scrub" }
 cls-wl-diff = { path = "../cls-wl-diff" }
 miette = { workspace = true }
 serde = { workspace = true }

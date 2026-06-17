@@ -252,6 +252,7 @@ dependencies = [
  "cls-sarif",
  "cls-schema",
  "cls-schema-migrate",
+ "cls-scrub",
  "cls-wl-diff",
  "miette",
  "serde",
