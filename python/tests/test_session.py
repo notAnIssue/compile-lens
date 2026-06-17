@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -79,11 +80,68 @@ def test_redaction_applied_under_default_strict(tmp_path: Path) -> None:
     assert data["session"]["host"].startswith("dh-")
 
 
-def test_report_is_not_built_yet(tmp_path: Path) -> None:
+def test_report_before_exit_raises(tmp_path: Path) -> None:
+    # No `with` block has run, so no artifact was written — report() has nothing to render.
+    s = session(output_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="after the `with` block"):
+        s.report()
+
+
+def test_report_builds_the_session_report_command(tmp_path: Path) -> None:
+    from compile_lens.session import Report
+
+    art = tmp_path / "session.cls.json"
+    base = tmp_path / "base.cls.json"
+    cmd = Report(art, base=base, gpu="H100-SXM-80GB", db=tmp_path / "db.toml")._command(
+        tmp_path / "out.html"
+    )
+    assert cmd[1:4] == ["session", "report", str(art)]
+    assert "--base" in cmd and str(base) in cmd
+    assert "--gpu" in cmd and "H100-SXM-80GB" in cmd
+    assert "--db" in cmd
+    assert cmd[-2:] == ["--output", str(tmp_path / "out.html")]
+
+
+def test_save_html_drives_the_cli_and_returns_the_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, list[str]] = {}
+
+    def fake_run(cmd: list[str], **_kw: object) -> SimpleNamespace:
+        seen["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stdout="<html>hero</html>", stderr="")
+
+    # Patch subprocess.run globally — session.py looks up `run` on the module at call time.
+    monkeypatch.setattr("subprocess.run", fake_run)
     with session(output_dir=tmp_path) as s:
         pass
-    with pytest.raises(NotImplementedError, match="cl session report"):
-        s.report()
+    out = s.report().save_html(tmp_path / "report.html")
+    assert out == tmp_path / "report.html"
+    assert seen["cmd"][1:3] == ["session", "report"]
+    assert seen["cmd"][-2:] == ["--output", str(tmp_path / "report.html")]
+
+
+def test_report_html_returns_the_rendered_string(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *_a, **_kw: SimpleNamespace(returncode=0, stdout="<html>hero</html>", stderr=""),
+    )
+    with session(output_dir=tmp_path) as s:
+        pass
+    assert s.report().html() == "<html>hero</html>"
+
+
+def test_report_surfaces_a_cli_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *_a, **_kw: SimpleNamespace(returncode=3, stdout="", stderr="unknown GPU `X`"),
+    )
+    with session(output_dir=tmp_path) as s:
+        pass
+    with pytest.raises(RuntimeError, match="unknown GPU"):
+        s.report().html()
 
 
 def test_session_captures_a_real_torch_recompile(
