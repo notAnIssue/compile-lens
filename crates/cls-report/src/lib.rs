@@ -11,7 +11,8 @@
 //! NaN `max_abs_diff` as the headline signal per ADR-039), lint (Tool 4), fusion opportunities
 //! (CODA crown-jewel), roofline (Tool 5), and a raw-artifacts footer. The externally-computed
 //! analyses (diff, DB-escalated lint, roofline) arrive via [`ReportInputs`]; everything else is
-//! derived from the artifact. The XSS hardening (a payload corpus + a CSP header) is in place.
+//! derived from the artifact. The XSS hardening (a payload corpus, a CSP header, and a URL
+//! allowlist on issue links) is in place.
 
 use cls_analyzer::lint::LintReport;
 use cls_analyzer::roofline::RooflineReport;
@@ -406,11 +407,33 @@ fn location(loc: Option<&cls_schema::SourceRange>) -> String {
     }
 }
 
-/// The reference issue URL as inert escaped text (a live link awaits the URL allowlist), or `—`.
+/// The reference issue URL as a link when allowlisted, else inert text, or `—`.
 fn issue_ref(issue: Option<&cls_schema::ReferenceIssue>) -> String {
     match issue.and_then(|i| i.url.as_deref()) {
-        Some(url) => format!("<code>{}</code>", esc(url)),
+        Some(url) => safe_link(url),
         None => "—".to_string(),
+    }
+}
+
+/// Hosts a report URL may link to. A report is shared HTML opened in a browser, and the URL comes
+/// from the artifact (a correctness DB, ultimately) — so only `https` links to these trusted
+/// prefixes become anchors; anything else (an arbitrary host, or a `javascript:` URI) stays inert
+/// text. Each prefix ends in `/` so `https://github.com/pytorch-evil/…` cannot slip past
+/// `https://github.com/pytorch/`.
+const URL_ALLOWLIST: &[&str] = &[
+    "https://github.com/pytorch/",
+    "https://docs.pytorch.org/",
+    "https://github.com/notAnIssue/compile-lens/",
+];
+
+/// Render `url` as an `<a>` only when it starts with an allowlisted `https` prefix; otherwise as
+/// inert escaped text. The href is still escaped, so even an allowlisted URL cannot break the
+/// attribute.
+fn safe_link(url: &str) -> String {
+    if URL_ALLOWLIST.iter().any(|prefix| url.starts_with(prefix)) {
+        format!("<a href=\"{}\">{}</a>", esc(url), esc(url))
+    } else {
+        format!("<code>{}</code>", esc(url))
     }
 }
 
