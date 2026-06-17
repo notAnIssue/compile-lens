@@ -19,6 +19,36 @@ fn example(name: &str) -> String {
     )
 }
 
+fn fixture(name: &str) -> String {
+    format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name)
+}
+
+#[test]
+fn report_runs_the_fusion_analyzer_for_the_crown_jewel_section() {
+    // The fixture carries the GEMM-Residual-RMSNorm-GEMM graphs but **no** stored
+    // `fusion_opportunities` — so a populated fusion section proves `cl session report` ran the
+    // Tool 6 analyzer (it does not just render stored data). Regression guard for the gap where the
+    // crown-jewel section silently rendered "none" for a freshly captured session.
+    let out = cl()
+        .arg("session")
+        .arg("report")
+        .arg(fixture("fusion_blocks.cls.json"))
+        .output()
+        .expect("spawn cl");
+
+    assert!(out.status.success(), "exit: {:?}", out.status.code());
+    let html = String::from_utf8_lossy(&out.stdout);
+    assert!(html.contains("Fusion opportunities"));
+    assert!(
+        !html.contains("No algebraic fusion opportunities found"),
+        "the analyzer found 3 opportunities in this fixture; the section must not be empty"
+    );
+    assert!(
+        html.contains("epilogue_kit.ops.fused_residual_rms_pattern"),
+        "the suggested-kernel column should render from the analyzed opportunities"
+    );
+}
+
 #[test]
 fn report_to_stdout_is_a_self_contained_html_document() {
     let out = cl()
