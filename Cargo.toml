@@ -23,3 +23,9 @@ anyhow = "1"
 ammonia = "4"
 indexmap = { version = "2", features = ["serde"] }
 criterion = { version = "0.8", default-features = false }
+# Security-critical redaction (cls-scrub): `regex` matches Python `re` semantics so the
+# share-time scrub agrees with the collect-time redactor; `sha2`/`hex` match Python
+# `hashlib.sha256` so the FQDN host hash is identical across both halves of the toolkit.
+regex = "1"
+sha2 = "0.10"
+hex = "0.4"
