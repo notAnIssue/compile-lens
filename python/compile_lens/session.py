@@ -1,12 +1,12 @@
 """``cl.session()`` — the hero entry point and the **source of truth** (P7, ADR-026).
 
-Six lines run the collectors over a `torch.compile` and produce a `.cls.json`::
+Six lines run the collectors over a `torch.compile`, produce a `.cls.json`, and render the report::
 
     import compile_lens as cl
 
     with cl.session() as s:
         output = model(input)
-    # s.artifact_path -> the written .cls.json   (s.report() renders it once Tool 7 lands)
+    s.report().save_html("report.html")   # the hero HTML report (s.artifact_path = the .cls.json)
 
 `cl.session(probes=...)` is a factory returning a context manager (ADR-026, weighted-matrix
 decision (b) "selective probes"): `__enter__` mounts the capture for the selected probes,
@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import io
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -171,17 +172,93 @@ class Session:
             collector.add_records(recompilations=parse_recompiles_log(captured_stderr))
         self.artifact_path = collector.finalize()
 
-    def report(self, output: Path | str | None = None) -> object:
-        """Render the session's `.cls.json` into the hero HTML report.
+    def report(
+        self,
+        *,
+        base: Path | str | None = None,
+        gpu: str | None = None,
+        db: Path | str | None = None,
+    ) -> Report:
+        """Return a :class:`Report` for the captured session — the last link of the hero loop::
 
-        The renderer ships as the `cl session report` CLI; wiring it into this Python method (so
-        `s.report().save_html(...)` works directly) is a later change. For now, render the written
-        artifact with the command below.
+            with cl.session() as s:
+                output = model(input)
+            s.report().save_html("report.html")
+
+        The renderer is the ``cl session report`` CLI, driven over a subprocess (a JSON artifact in,
+        HTML out — never an in-process binding, ADR-006). ``base`` adds the IR-diff regression
+        section; ``gpu`` and ``db`` feed the roofline and lint sections.
         """
-        raise NotImplementedError(
-            "Python-side report() is not wired yet. Render the written artifact with: "
-            f"`cl session report {self.artifact_path} --output report.html`"
+        if self.artifact_path is None:
+            raise RuntimeError(
+                "report() is only available after the `with` block exits and writes the artifact"
+            )
+        return Report(
+            self.artifact_path,
+            base=Path(base) if base is not None else None,
+            gpu=gpu,
+            db=Path(db) if db is not None else None,
         )
+
+
+def _resolve_cl_bin() -> str:
+    """The `cl` binary to drive: ``$CL_BIN`` if set, else ``cl`` on PATH (the convention the
+    autotune harness also uses)."""
+    return os.environ.get("CL_BIN", "cl")
+
+
+class Report:
+    """A renderable hero report for a captured session.
+
+    The renderer is the Rust ``cl session report`` CLI; this class drives it over a subprocess — a
+    ``.cls.json`` artifact in, HTML out, never an in-process binding (ADR-006). Build one via
+    :meth:`Session.report`, then call :meth:`save_html` (write a file) or :meth:`html` (get a str).
+    """
+
+    def __init__(
+        self,
+        artifact_path: Path,
+        *,
+        base: Path | None = None,
+        gpu: str | None = None,
+        db: Path | None = None,
+    ) -> None:
+        self.artifact_path = artifact_path
+        self._base = base
+        self._gpu = gpu
+        self._db = db
+
+    def _command(self, output: Path | None) -> list[str]:
+        """The ``cl session report`` argv (``--output`` is added only when writing to a file)."""
+        cmd = [_resolve_cl_bin(), "session", "report", str(self.artifact_path)]
+        if self._base is not None:
+            cmd += ["--base", str(self._base)]
+        if self._gpu is not None:
+            cmd += ["--gpu", self._gpu]
+        if self._db is not None:
+            cmd += ["--db", str(self._db)]
+        if output is not None:
+            cmd += ["--output", str(output)]
+        return cmd
+
+    def _run(self, output: Path | None) -> str:
+        proc = subprocess.run(self._command(output), capture_output=True, text=True)
+        if proc.returncode != 0:
+            # Surface the CLI's typed error (e.g. an unknown --gpu) rather than an opaque exit code.
+            raise RuntimeError(
+                f"`cl session report` failed (exit {proc.returncode}): {proc.stderr.strip()}"
+            )
+        return proc.stdout
+
+    def html(self) -> str:
+        """Render and return the HTML as a string (nothing written to disk)."""
+        return self._run(output=None)
+
+    def save_html(self, output: Path | str) -> Path:
+        """Render and write the HTML to ``output``; returns the path written."""
+        out = Path(output)
+        self._run(out)
+        return out
 
 
 def session(
