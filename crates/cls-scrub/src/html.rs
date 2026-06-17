@@ -68,8 +68,9 @@ impl HtmlScrubStats {
 pub fn scrub_html(html: &str) -> (String, HtmlScrubStats) {
     let mut stats = HtmlScrubStats::default();
 
-    // 1. Re-scrub secret tokens from the visible text (same rules as the argv scrub).
-    let (mut out, tokens_scrubbed) = rules::scrub_command(html, false);
+    // 1. Re-scrub secret tokens from the visible text. Uses the HTML-safe bare-token rules only —
+    //    the argv `--flag=\S+` patterns are greedy across markup and would eat an adjacent tag.
+    let (mut out, tokens_scrubbed) = rules::scrub_known_tokens(html);
     stats.tokens_scrubbed = tokens_scrubbed;
 
     // 2. Neutralize dangerous constructs (cosmetic; the CSP is the guarantee).
@@ -160,12 +161,15 @@ mod tests {
     }
 
     #[test]
-    fn scrubs_leaked_tokens_in_text() {
+    fn scrubs_leaked_tokens_without_eating_markup() {
         let leaky = "<html><head></head><body><code>--hf-token=hf_abcdefghijklmnopqrst</code></body></html>";
         let (out, stats) = scrub_html(leaky);
         assert!(stats.tokens_scrubbed);
-        assert!(out.contains("--hf-token=<scrubbed>"));
+        // The bare hf_ token is redacted; the adjacent </code> tag survives (the argv \S+ rule
+        // would have eaten it).
+        assert!(out.contains("hf_<scrubbed>"));
         assert!(!out.contains("hf_abcdefghijklmnopqrst"));
+        assert!(out.contains("</code>"), "closing tag must survive: {out}");
     }
 
     #[test]
