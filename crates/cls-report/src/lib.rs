@@ -16,7 +16,7 @@
 
 use cls_analyzer::lint::LintReport;
 use cls_analyzer::roofline::RooflineReport;
-use cls_schema::{ClsArtifact, Session};
+use cls_schema::{ClsArtifact, FusionOpportunity, Session};
 // Re-exported: `ReportInputs` names it, so callers (the CLI, tests) need to as well.
 pub use cls_wl_diff::IrGraphDiff;
 
@@ -32,6 +32,10 @@ pub struct ReportInputs<'a> {
     pub lint: Option<&'a LintReport>,
     /// The roofline analysis (Tool 5), computed against the chosen GPU.
     pub roofline: Option<&'a RooflineReport>,
+    /// The fusion opportunities (Tool 6), analyzed from the artifact's graphs. `None` falls back to
+    /// any `fusion_opportunities` already stored on the artifact — but the CLI runs the analyzer and
+    /// hands the result in, because the capture stores graphs, not fusion results (they are derived).
+    pub fusion: Option<&'a [FusionOpportunity]>,
 }
 
 /// Render a session artifact into a self-contained HTML report. The optional analyses in `inputs`
@@ -47,7 +51,7 @@ pub fn render(artifact: &ClsArtifact, inputs: &ReportInputs) -> String {
     sections.push_str(&cache_stability_section(artifact));
     sections.push_str(&divergence_section(artifact));
     sections.push_str(&lint_section(artifact, inputs.lint));
-    sections.push_str(&fusion_section(artifact));
+    sections.push_str(&fusion_section(artifact, inputs.fusion));
     sections.push_str(&roofline_section(inputs.roofline));
     sections.push_str(&raw_section(artifact));
     document(&artifact.session, &sections)
@@ -514,8 +518,11 @@ fn dim(v: Option<u64>) -> String {
     v.map(|n| n.to_string()).unwrap_or_else(|| "?".to_string())
 }
 
-fn fusion_section(artifact: &ClsArtifact) -> String {
-    if artifact.fusion_opportunities.is_empty() {
+fn fusion_section(artifact: &ClsArtifact, analyzed: Option<&[FusionOpportunity]>) -> String {
+    // Prefer the freshly-analyzed opportunities the CLI hands in (Tool 6 derives them from the
+    // captured graphs); fall back to any stored on the artifact for a bare render.
+    let opportunities = analyzed.unwrap_or(&artifact.fusion_opportunities);
+    if opportunities.is_empty() {
         return section(
             "fusion",
             "Fusion opportunities (CODA)",
@@ -529,7 +536,7 @@ fn fusion_section(artifact: &ClsArtifact) -> String {
          <th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested kernel</th>\
          </tr></thead>\n<tbody>\n",
     );
-    for f in &artifact.fusion_opportunities {
+    for f in opportunities {
         let shape = f.shape.as_ref().map_or_else(
             || "—".to_string(),
             |s| format!("{}×{}×{}×{}", dim(s.m), dim(s.n), dim(s.k0), dim(s.k1),),
