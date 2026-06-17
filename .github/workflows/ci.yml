@@ -49,6 +49,10 @@ jobs:
       # kernel-roofline (Tool 5): the rank-correlation pruning gate is sound — prune only when the
       # predicted ranking tracks the measured one, fall back to a full sweep otherwise.
       - run: cargo test -p cls-roofline --test rank_correlation_invariant
+      # cls-scrub: the share-time redaction must produce byte-identical, share-safe output and must
+      # never let a flagged secret survive (fuzz). A red check here means a scrub regressed and the
+      # release would leak.
+      - run: cargo test -p cls-scrub --test corpus
 
   ruff-mypy:
     name: Python lint + typecheck

