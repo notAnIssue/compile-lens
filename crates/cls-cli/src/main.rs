@@ -5,9 +5,12 @@
 //! this binary as a subprocess (control-flow crosses the language boundary via
 //! subprocess + file, not FFI).
 //!
-//! For v0.5.0 the only wired subcommand is `collect`, kept minimal so the `cls-errors`
-//! rendering pipeline (miette + thiserror, ADR-022) is exercised end-to-end. The real
-//! collector lands in Phase 1.
+//! Every analyzer subcommand is wired (`recompile-summary` / `diff` / `cache-stability` /
+//! `divergence-view` / `compile-lint` / `kernel-roofline` / `fusion-detect`), plus `session
+//! report` (the hero HTML), `scrub`, and `migrate`. The one exception is `collect`, which stays a
+//! typed `NotYetImplemented` stub: collection is driven from the Python `cl.session()` front-end
+//! (the source of truth), and this binary renders/analyzes what it wrote — the data crosses the
+//! language boundary as a `.cls.json` file over a subprocess, not via FFI (ADR-006).
 //!
 //! Observability (tracing + debug only, no metric export) is
 //! configured by environment variables, *not* by CLI flags, so the surface stays the same
