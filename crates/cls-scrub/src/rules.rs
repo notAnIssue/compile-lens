@@ -20,9 +20,11 @@ use sha2::{Digest, Sha256};
 const SENSITIVE_DIRS: [&str; 3] = ["/.ssh/", "/.aws/", "/.gnupg/"];
 
 // ── command (argv) token scrubbing — §2.2 ────────────────────────────────────────────────
-/// `(pattern, replacement)` applied in order; each keeps the flag/key and redacts the value.
-/// `${1}` re-emits the first capture group (the `--flag=` prefix) so only the secret is lost.
-static COMMAND_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+/// `--flag=<value>` forms: keep the flag, redact the value. `${1}` re-emits the first capture
+/// group (the `--flag=` prefix). The value is `\S+` — correct for argv (a value runs to the next
+/// space) but **greedy across HTML markup** (`--hf-token=hf_x</code>` would eat the tag), so these
+/// patterns are argv-only and not used by the HTML scrub. See [`scrub_known_tokens`].
+static FLAG_TOKEN_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
     [
         (r"(--api[_-]?key=)\S+", "${1}<scrubbed>"),
         (r"(--hf-token=)\S+", "${1}<scrubbed>"),
@@ -31,6 +33,22 @@ static COMMAND_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
         (r"(--password=)\S+", "${1}<scrubbed>"),
         (r"(--secret=)\S+", "${1}<scrubbed>"),
         (r"(--auth=)\S+", "${1}<scrubbed>"),
+    ]
+    .into_iter()
+    .map(|(p, r)| {
+        (
+            Regex::new(p).expect("static flag-scrub pattern is valid"),
+            r,
+        )
+    })
+    .collect()
+});
+
+/// Bare provider-token forms (`hf_…`, `sk-…`, AWS / Slack / `Bearer …`). Each value is bounded by
+/// its own character class, so it stops at an HTML delimiter like `<` — these are safe to apply to
+/// rendered HTML as well as argv.
+static BARE_TOKEN_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    [
         (r"\bBearer\s+[A-Za-z0-9._-]+", "Bearer <scrubbed>"),
         (r"\bhf_[A-Za-z0-9]{20,}", "hf_<scrubbed>"),
         (r"\bsk-[A-Za-z0-9]{20,}", "sk-<scrubbed>"),
@@ -40,7 +58,7 @@ static COMMAND_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
     .into_iter()
     .map(|(p, r)| {
         (
-            Regex::new(p).expect("static command-scrub pattern is valid"),
+            Regex::new(p).expect("static bare-token pattern is valid"),
             r,
         )
     })
@@ -74,7 +92,7 @@ static STRICT_TOKEN_SCRUBS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new
 /// guarantee both rely on, not merely "a pattern fired".
 pub fn scrub_command(command: &str, strict: bool) -> (String, bool) {
     let mut out = command.to_string();
-    for (pattern, replacement) in COMMAND_SCRUBS.iter() {
+    for (pattern, replacement) in FLAG_TOKEN_SCRUBS.iter().chain(BARE_TOKEN_SCRUBS.iter()) {
         out = pattern.replace_all(&out, *replacement).into_owned();
     }
     if strict {
@@ -83,6 +101,20 @@ pub fn scrub_command(command: &str, strict: bool) -> (String, bool) {
         }
     }
     let changed = out != command;
+    (out, changed)
+}
+
+/// Redact only the **bare provider-token** forms (`hf_…`, `sk-…`, AWS/Slack/`Bearer`) from a string.
+///
+/// Unlike [`scrub_command`], this omits the greedy `--flag=\S+` patterns, so it is safe to run over
+/// rendered HTML — a token adjacent to markup (`--hf-token=hf_x</code>`) loses the token but keeps
+/// the tag. Returns the scrubbed text and whether it actually changed.
+pub fn scrub_known_tokens(text: &str) -> (String, bool) {
+    let mut out = text.to_string();
+    for (pattern, replacement) in BARE_TOKEN_SCRUBS.iter() {
+        out = pattern.replace_all(&out, *replacement).into_owned();
+    }
+    let changed = out != text;
     (out, changed)
 }
 

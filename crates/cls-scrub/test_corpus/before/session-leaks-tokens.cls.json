@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.5.0",
+  "session": {
+    "id": "00000000-0000-4000-8000-0000000t0k3n",
+    "timestamp": "2026-06-17T00:00:00Z",
+    "torch_version": "2.11.0",
+    "redaction_policy": "confidential",
+    "host": "ml-prod-07.megacorp.internal",
+    "command": "python train.py --hf-token=hf_abcdefghijklmnopqrstuvwx --api-key=sk-0123456789abcdefghijABCD",
+    "env_snapshot": {
+      "relevant_env_vars": {
+        "TORCH_LOGS": "+recompiles",
+        "HF_TOKEN": "hf_secretsecretsecret",
+        "PATH": "/usr/local/bin"
+      },
+      "random_seed": 0
+    }
+  }
+}
