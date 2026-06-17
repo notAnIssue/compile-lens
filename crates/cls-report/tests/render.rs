@@ -22,7 +22,7 @@ const MINIMAL_SESSION: &str = r#"{"schema_version":"0.5.0","session":{"id":"s1",
 
 #[test]
 fn renders_a_self_contained_offline_document() {
-    let html = cls_report::render(&from_json(MINIMAL_SESSION));
+    let html = cls_report::render(&from_json(MINIMAL_SESSION), None);
     assert!(html.starts_with("<!DOCTYPE html>"), "missing doctype");
     assert!(html.contains("<style>"), "CSS must be inlined");
     // Offline: no external/CDN references anywhere in the document.
@@ -38,7 +38,7 @@ fn renders_a_self_contained_offline_document() {
 #[test]
 fn a_cache_stable_session_says_so() {
     // minimal.cls.json has no recompilations.
-    let html = cls_report::render(&example("minimal.cls.json"));
+    let html = cls_report::render(&example("minimal.cls.json"), None);
     assert!(html.contains("Recompile summary"));
     assert!(html.contains("cache-stable"));
 }
@@ -46,7 +46,7 @@ fn a_cache_stable_session_says_so() {
 #[test]
 fn renders_the_recompilation_from_the_full_example() {
     // full.cls.json carries one recompilation.
-    let html = cls_report::render(&example("full.cls.json"));
+    let html = cls_report::render(&example("full.cls.json"), None);
     assert!(html.contains("Recompile summary"));
     assert!(html.contains("recompilation(s)"));
     assert!(html.contains("<table>"));
@@ -56,10 +56,13 @@ fn renders_the_recompilation_from_the_full_example() {
 #[test]
 fn user_controlled_strings_are_escaped() {
     // A torch_version carrying an injection must render as inert text, never live markup.
-    let html = cls_report::render(&from_json(
-        r#"{"schema_version":"0.5.0","session":{"id":"s1","timestamp":"t",
+    let html = cls_report::render(
+        &from_json(
+            r#"{"schema_version":"0.5.0","session":{"id":"s1","timestamp":"t",
         "torch_version":"<script>alert(1)</script>","redaction_policy":"default-strict"}}"#,
-    ));
+        ),
+        None,
+    );
     assert!(
         !html.contains("<script>alert(1)</script>"),
         "injection must not survive verbatim"
@@ -69,13 +72,16 @@ fn user_controlled_strings_are_escaped() {
 
 #[test]
 fn divergence_section_surfaces_a_nan_as_the_headline_signal() {
-    let html = cls_report::render(&from_json(
-        r#"{"schema_version":"0.5.0","session":{"id":"s1","timestamp":"t",
+    let html = cls_report::render(
+        &from_json(
+            r#"{"schema_version":"0.5.0","session":{"id":"s1","timestamp":"t",
         "torch_version":"2.6.0","redaction_policy":"default-strict"},
         "divergences":[{"divergence_id":"d1","first_divergent_layer":"layers.3.mlp",
         "max_abs_diff":"NaN","num_layers_compared":12,"rtol":1e-3,"atol":1e-5,
         "suggested_cause":"inductor fusion of the residual add"}]}"#,
-    ));
+        ),
+        None,
+    );
     assert!(html.contains("Divergence (eager vs compiled)"));
     assert!(html.contains("layers.3.mlp"));
     // The NaN sentinel surfaces as the headline "compiled output is NaN", not a dropped value.
@@ -84,14 +90,17 @@ fn divergence_section_surfaces_a_nan_as_the_headline_signal() {
 
 #[test]
 fn fusion_section_renders_the_crown_jewel() {
-    let html = cls_report::render(&from_json(
-        r#"{"schema_version":"0.5.0","session":{"id":"s1","timestamp":"t",
+    let html = cls_report::render(
+        &from_json(
+            r#"{"schema_version":"0.5.0","session":{"id":"s1","timestamp":"t",
         "torch_version":"2.6.0","redaction_policy":"default-strict"},
         "fusion_opportunities":[{"pattern_id":"A","shape":{"m":4096,"n":4096,"k0":4096,"k1":4096,
         "dtype":"bfloat16"},"baseline_hbm_bytes":1.0e8,"fused_hbm_bytes":5.0e7,
         "estimated_speedup":2.04,"suggested_kernel":"fold per-row 1/rms into the second GEMM epilogue",
         "confidence":"high"}]}"#,
-    ));
+        ),
+        None,
+    );
     assert!(html.contains("Fusion opportunities (CODA)"));
     assert!(html.contains("2.04×"), "speedup shown: {html}");
     assert!(html.contains("fold per-row 1/rms into the second GEMM epilogue"));
@@ -100,7 +109,7 @@ fn fusion_section_renders_the_crown_jewel() {
 
 #[test]
 fn empty_sections_say_so_rather_than_placeholder() {
-    let html = cls_report::render(&from_json(MINIMAL_SESSION));
+    let html = cls_report::render(&from_json(MINIMAL_SESSION), None);
     assert!(html.contains("No divergence findings"));
     assert!(html.contains("No algebraic fusion opportunities"));
 }
@@ -115,9 +124,10 @@ fn repo_fixture(rel: &str) -> ClsArtifact {
 fn cache_stability_section_renders_a_silently_stale_finding() {
     // listing2 = Li et al. Listing 2 — a silently-stale cache (state drifts, graph reused, output
     // frozen).
-    let html = cls_report::render(&repo_fixture(
-        "tests/fixtures/cache_stability/listing2.cls.json",
-    ));
+    let html = cls_report::render(
+        &repo_fixture("tests/fixtures/cache_stability/listing2.cls.json"),
+        None,
+    );
     assert!(html.contains("Cache stability"));
     assert!(
         html.contains("drifted attrs"),
@@ -127,7 +137,51 @@ fn cache_stability_section_renders_a_silently_stale_finding() {
 
 #[test]
 fn cache_stability_section_reports_stable_when_no_iterations() {
-    let html = cls_report::render(&from_json(MINIMAL_SESSION));
+    let html = cls_report::render(&from_json(MINIMAL_SESSION), None);
     assert!(html.contains("Cache stability"));
     assert!(html.contains("No silently-stale-cache"));
+}
+
+#[test]
+fn ir_diff_section_is_absent_without_a_baseline() {
+    let html = cls_report::render(&from_json(MINIMAL_SESSION), None);
+    assert!(!html.contains("IR Diff"), "no baseline -> no diff section");
+}
+
+#[test]
+fn ir_diff_section_leads_with_the_structural_change() {
+    let diff = cls_report::IrGraphDiff {
+        added: vec!["mul_2".into()],
+        removed: vec![],
+        modified: vec![("to_1".into(), "to_1b".into())],
+        matched: vec![("to_1".into(), "to_1b".into(), 0.91)],
+        match_coverage: 0.9,
+        anchor_uniqueness_ratio: 0.8,
+    };
+    let html = cls_report::render(&from_json(MINIMAL_SESSION), Some(&diff));
+    assert!(html.contains("IR Diff (base → head)"));
+    assert!(
+        html.contains("<strong>1</strong> added"),
+        "change counts: {html}"
+    );
+    assert!(html.contains("to_1b"), "modified head id shown");
+    assert!(html.contains("0.91"), "match confidence shown");
+    assert!(
+        html.contains("90%") && html.contains("80%"),
+        "quality gauges shown"
+    );
+}
+
+#[test]
+fn ir_diff_section_says_clean_when_graphs_are_identical() {
+    let diff = cls_report::IrGraphDiff {
+        added: vec![],
+        removed: vec![],
+        modified: vec![],
+        matched: vec![],
+        match_coverage: 1.0,
+        anchor_uniqueness_ratio: 1.0,
+    };
+    let html = cls_report::render(&from_json(MINIMAL_SESSION), Some(&diff));
+    assert!(html.contains("No structural change"));
 }
