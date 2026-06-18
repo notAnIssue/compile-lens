@@ -11,14 +11,14 @@ a `head` variant differ by **exactly one thing**: the `head` flips the tail's ce
 to `(bias - x) / scale`, a silent sign error that raises no exception and just produces wrong
 numbers.
 
-**Regenerate the report** from the committed artifacts (no PyTorch needed — `cl session report` is
-pure Rust over the `.cls.json` files):
+**Just open [`hero.html`](./hero.html).** The rendered report is committed and CI-checked against
+the current renderer, so there is nothing to build or install — open it in a browser.
+
+**Regenerate it** (only needed after a renderer change) with one command, which builds the current
+`cl` binary and re-renders so the output can never come from a stale binary:
 
 ```bash
-cl session report examples/hero_head.cls.json \
-    --base examples/hero_base.cls.json --output hero.html
-cl scrub hero.html        # confirms it is already share-safe (the report is born with a strict CSP)
-# open hero.html
+./scripts/render_hero.sh        # writes examples/hero.html
 ```
 
 What the report shows:
@@ -39,3 +39,9 @@ python examples/hero_scene.py     # rewrites hero_base.cls.json / hero_head.cls.
 
 The committed artifacts are pinned for determinism and scrubbed to `public-safe`, so they carry no
 host or command — safe to share as-is.
+
+> **On `cl` discovery.** The script and the CLI use the binary built into this repo
+> (`target/release/cl`); the in-process hero loop `cl.session().report().save_html()` instead shells
+> out to a `cl` on your `PATH` (or `$CL_BIN`). Shipping the Rust binary alongside the Python wheel so
+> that always resolves is part of the release milestone, not yet wired — for now, set
+> `CL_BIN=$(pwd)/target/release/cl` if you drive the hero loop from Python.
