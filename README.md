@@ -5,18 +5,15 @@
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](./LICENSE)
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#roadmap)
 
-<!-- hero-shot-placeholder: a screenshot of the rendered hero report lands here. Generate it with
-     the reproducible example below (examples/), open the HTML, and screenshot the top. -->
+<!-- hero-shot-placeholder: a screenshot of examples/hero.html lands here — open that committed
+     report in a browser and screenshot the top. -->
 
-A worked **hero report** — one capture, both headline stories in one offline HTML — is reproducible
-from [`examples/`](./examples/): a base→head pair whose only difference is a silent sign-flip bug.
-`cl session report` renders the **IR Diff** section recovering it as exactly one `modified` node at
-100% confidence (the regression-governance pillar) and the **CODA fusion** section flagging three
-`Pattern A` opportunities (the crown jewel).
-
-```bash
-cl session report examples/hero_head.cls.json --base examples/hero_base.cls.json --output hero.html
-```
+A worked **hero report** lives at [`examples/hero.html`](./examples/hero.html) — one capture, both
+headline stories in one self-contained offline HTML. **Open it directly; no build, no install.** It
+renders a base→head pair whose only difference is a silent sign-flip bug: the **IR Diff** section
+recovers it as exactly one `modified` node at 100% confidence (the regression-governance pillar),
+and the **CODA fusion** section flags three `Pattern A` opportunities (the crown jewel). Regenerate
+it any time with `./scripts/render_hero.sh`.
 
 ---
 
