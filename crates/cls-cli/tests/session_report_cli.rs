@@ -23,6 +23,37 @@ fn fixture(name: &str) -> String {
     format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name)
 }
 
+fn repo_path(rel: &str) -> String {
+    format!("{}/../../{}", env!("CARGO_MANIFEST_DIR"), rel)
+}
+
+#[test]
+fn committed_hero_report_matches_the_current_renderer() {
+    // The committed `examples/hero.html` (the showcase report, openable with zero build) must match
+    // what the renderer produces *right now* from the committed example artifacts. This is the gate
+    // that stops a renderer change from silently leaving a stale showcase report on disk — which is
+    // exactly the stale-binary footgun the committed golden exists to remove. Regenerate after an
+    // intended renderer change with `scripts/render_hero.sh`.
+    let out = cl()
+        .arg("session")
+        .arg("report")
+        .arg(repo_path("examples/hero_head.cls.json"))
+        .arg("--base")
+        .arg(repo_path("examples/hero_base.cls.json"))
+        .output()
+        .expect("spawn cl");
+    assert!(out.status.success(), "exit: {:?}", out.status.code());
+
+    let rendered = String::from_utf8_lossy(&out.stdout);
+    let committed =
+        std::fs::read_to_string(repo_path("examples/hero.html")).expect("read examples/hero.html");
+    assert_eq!(
+        rendered.trim_end_matches('\n'),
+        committed.trim_end_matches('\n'),
+        "examples/hero.html is stale — regenerate it with `scripts/render_hero.sh`"
+    );
+}
+
 #[test]
 fn report_runs_the_fusion_analyzer_for_the_crown_jewel_section() {
     // The fixture carries the GEMM-Residual-RMSNorm-GEMM graphs but **no** stored
