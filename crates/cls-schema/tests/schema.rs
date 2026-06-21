@@ -87,13 +87,13 @@ fn test_full_example_deserialize() {
         Some("memory")
     );
 
-    // Tool 6 fusion opportunity (ADR-037): pattern + shape + suggested kernel survive deserialize.
+    // Tool 6 fusion opportunity (ADR-037): pattern + shape + suggested fusion survive deserialize.
     let fusion = &artifact.fusion_opportunities[0];
     assert_eq!(fusion.pattern_id, "A");
     assert_eq!(fusion.confidence.as_deref(), Some("high"));
     assert_eq!(fusion.shape.as_ref().expect("shape present").m, Some(8192));
     assert_eq!(
-        fusion.suggested_kernel.as_deref(),
+        fusion.suggested_fusion.as_deref(),
         Some("fold per-row 1/rms into the second GEMM epilogue")
     );
 
@@ -258,7 +258,7 @@ fn test_fusion_opportunity_round_trips_and_skips_when_empty() {
         baseline_hbm_bytes: Some(432_013_312.0),
         fused_hbm_bytes: Some(300_941_312.0),
         estimated_speedup: Some(1.43),
-        suggested_kernel: Some("fold per-row 1/rms into the second GEMM epilogue".into()),
+        suggested_fusion: Some("fold per-row 1/rms into the second GEMM epilogue".into()),
         confidence: Some("high".into()),
     });
     let json = serde_json::to_string(&artifact).expect("serialize");

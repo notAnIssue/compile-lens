@@ -217,7 +217,7 @@
       "baseline_hbm_bytes": 1757413376,
       "fused_hbm_bytes": 861339648,
       "estimated_speedup": 2.04,
-      "suggested_kernel": "fold per-row 1/rms into the second GEMM epilogue",
+      "suggested_fusion": "fold per-row 1/rms into the second GEMM epilogue",
       "confidence": "high"
     }
   ]

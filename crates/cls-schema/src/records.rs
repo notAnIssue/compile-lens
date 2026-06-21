@@ -288,7 +288,8 @@ pub struct DivergenceAttribution {
 
 /// Tool 6 algebraic fusion opportunity (`fusion_opportunities[]`). An analysis result: a matched
 /// `GEMM-Residual-RMSNorm-GEMM`-style pattern with its analytical HBM-traffic estimate and a
-/// suggested epilogue kernel. Suggest-only — compile-lens never imports or calls the kernel.
+/// plain-language description of the fusion to apply. Suggest-only — the detector identifies and
+/// quantifies the opportunity; it never writes, imports, or runs a kernel.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FusionOpportunity {
     /// Matched pattern, e.g. `"A"` (GEMM-Residual-RMSNorm-GEMM).
@@ -318,9 +319,10 @@ pub struct FusionOpportunity {
         with = "crate::non_finite::opt"
     )]
     pub estimated_speedup: Option<f64>,
-    /// Suggested `a fused epilogue kernel` kernel name — a string reference only (the seam).
+    /// Plain-language description of the fusion to apply, e.g. "fold per-row 1/rms into the second
+    /// GEMM epilogue". Suggest-only — names no kernel, library, or API.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub suggested_kernel: Option<String>,
+    pub suggested_fusion: Option<String>,
     /// `high` / `medium` / `low`. Kept `String` for forward-compat (same as the lint vocabularies).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<String>,

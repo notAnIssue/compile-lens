@@ -378,7 +378,8 @@ class FusionLocation(_Model):
 
 class FusionOpportunity(_Model):
     """Tool 6 algebraic fusion opportunity (``fusion_opportunities[]``). Suggest-only — the
-    ``suggested_kernel`` is a string reference compile-lens never imports or calls."""
+    detector identifies and quantifies the opportunity and describes the fusion to apply in
+    ``suggested_fusion``; it never writes, imports, or runs a kernel."""
 
     pattern_id: str
     location: FusionLocation | None = None
@@ -386,7 +387,7 @@ class FusionOpportunity(_Model):
     baseline_hbm_bytes: NonFiniteFloat | None = None
     fused_hbm_bytes: NonFiniteFloat | None = None
     estimated_speedup: NonFiniteFloat | None = None
-    suggested_kernel: str | None = None
+    suggested_fusion: str | None = None
     confidence: str | None = None  # "high" / "medium" / "low" (plain str, forward-compat)
 
 

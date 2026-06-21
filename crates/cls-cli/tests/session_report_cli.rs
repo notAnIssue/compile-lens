@@ -76,7 +76,7 @@ fn report_runs_the_fusion_analyzer_for_the_crown_jewel_section() {
     );
     assert!(
         html.contains("fold per-row 1/rms into the second GEMM epilogue"),
-        "the suggested-kernel column should render from the analyzed opportunities"
+        "the suggested-fusion column should render from the analyzed opportunities"
     );
 }
 

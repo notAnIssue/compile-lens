@@ -430,7 +430,7 @@
         "baseline_hbm_bytes": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "fused_hbm_bytes": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
         "estimated_speedup": { "anyOf": [{ "type": "number", "minimum": 0, "description": "baseline/fused under the memory-bound assumption; analytical only (N10)." }, { "$ref": "#/$defs/nonFiniteFloat" }] },
-        "suggested_kernel": { "type": "string", "description": "a fused epilogue kernel kernel name; a string reference only, never imported or called." },
+        "suggested_fusion": { "type": "string", "description": "Plain-language description of the fusion to apply; suggest-only, names no kernel or library." },
         "confidence": { "type": "string", "enum": ["high", "medium", "low"] }
       }
     }
