@@ -20,7 +20,7 @@ jobs:
     name: Rust fmt + clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -32,7 +32,7 @@ jobs:
     name: Algorithmic invariants (release blocker)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Release-blocker correctness invariants (design D7). They also run inside
@@ -58,7 +58,7 @@ jobs:
     name: Python lint + typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -75,7 +75,7 @@ jobs:
       matrix:
         python: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -118,7 +118,7 @@ jobs:
     name: Migration (current-version byte-copy + dry-run)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: migrate current-version artifact and cmp
@@ -133,7 +133,7 @@ jobs:
     name: Tracing (CLS_LOG / CLS_LOG_FORMAT contract)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: build cls-cli
@@ -158,7 +158,7 @@ jobs:
     name: Private fingerprint sweep
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # Run the same hook that guards commits, across every tracked source file, so a push that
       # bypassed the local pre-commit hooks cannot slip an internal planning identifier into the
       # public repo (ADR-028). Single-sourced: the patterns and whitelist live in the hook script.
