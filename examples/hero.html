@@ -30,7 +30,17 @@
 </details>
 <details open id="recompile">
 <summary><h2>Recompile summary</h2></summary>
-<div class="body"><p class="good">No recompilations recorded — the compiled region was cache-stable.</p></div>
+<div class="body"><p><strong>3</strong> recompilation(s), across <strong>1</strong> guard categor(y/ies).</p><table>
+<thead><tr><th>category</th><th>count</th><th>axis</th><th>observed values</th></tr></thead>
+<tbody>
+<tr><td>size</td><td>3</td><td><code>x[0]</code></td><td>16→32, 16→64, 16→128</td></tr>
+</tbody>
+</table>
+<h3>Top suggestions</h3>
+<ol>
+<li>`x` dim 0 keeps changing size — mark it dynamic to stop the recompiles: `torch._dynamo.mark_dynamic(x, 0)` (or compile with `dynamic=True`).<br><span class="muted">evidence: size cluster on x[0] — 3 recompile(s) (values 16→32, 16→64, 16→128)</span></li>
+</ol>
+</div>
 </details>
 <details open id="cache-stability">
 <summary><h2>Cache stability</h2></summary>
@@ -38,11 +48,24 @@
 </details>
 <details open id="divergence">
 <summary><h2>Divergence (eager vs compiled)</h2></summary>
-<div class="body"><p class="muted">No divergence findings recorded.</p></div>
+<div class="body"><table>
+<thead><tr><th>first divergent layer</th><th>max abs diff</th><th>layers compared</th><th>attributed cause</th></tr></thead>
+<tbody>
+<tr><td><code>blocks.0.norm</code></td><td>5.033e0</td><td>2</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
 </details>
 <details open id="lint">
 <summary><h2>Lint (Tool 4)</h2></summary>
-<div class="body"><p class="good">No lint candidates from the static scan.</p></div>
+<div class="body"><p class="warn">1 candidate pattern(s) from the static scan — not yet escalated. Pass <code>--db &lt;correctness.toml&gt;</code> to rate severity and attach issue links.</p>
+<table>
+<thead><tr><th>pattern</th><th>location</th><th>trigger</th><th>confidence</th></tr></thead>
+<tbody>
+<tr><td><code>in_place_op_on_alias</code></td><td><code>{repo}/examples/hero_scene.py:96</code></td><td><code>—</code></td><td>ast_match</td></tr>
+</tbody>
+</table>
+</div>
 </details>
 <details open id="fusion">
 <summary><h2>Fusion opportunities (CODA)</h2></summary>
@@ -50,9 +73,9 @@
 <table>
 <thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th><th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested fusion</th></tr></thead>
 <tbody>
-<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
-<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
-<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
+<tr><td><code>A</code></td><td>16×256×64×64</td><td>2.703e5 → 1.888e5</td><td><strong>1.43×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
+<tr><td><code>A</code></td><td>16×256×64×64</td><td>2.703e5 → 1.888e5</td><td><strong>1.43×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
+<tr><td><code>A</code></td><td>16×256×64×64</td><td>2.703e5 → 1.888e5</td><td><strong>1.43×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
 </tbody>
 </table>
 </div>
@@ -63,7 +86,7 @@
 </details>
 <details open id="raw">
 <summary><h2>Raw artifacts</h2></summary>
-<div class="body"><dl class="meta"><dt>schema</dt><dd>0.5.0</dd><dt>recompilations</dt><dd>0</dd><dt>compiled graphs</dt><dd>1</dd><dt>graph breaks</dt><dd>0</dd><dt>iterations</dt><dd>1</dd></dl><p class="muted">The machine-readable <code>.cls.json</code> is the source of truth for this report.</p></div>
+<div class="body"><dl class="meta"><dt>schema</dt><dd>0.5.0</dd><dt>recompilations</dt><dd>3</dd><dt>compiled graphs</dt><dd>1</dd><dt>graph breaks</dt><dd>0</dd><dt>iterations</dt><dd>3</dd></dl><p class="muted">The machine-readable <code>.cls.json</code> is the source of truth for this report.</p></div>
 </details>
 </main>
 </body>
