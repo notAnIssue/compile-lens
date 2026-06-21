@@ -16,7 +16,7 @@
 
 use cls_analyzer::lint::LintReport;
 use cls_analyzer::roofline::RooflineReport;
-use cls_schema::{ClsArtifact, FusionOpportunity, Session};
+use cls_schema::{ClsArtifact, FusionOpportunity, FxNode, Session};
 // Re-exported: `ReportInputs` names it, so callers (the CLI, tests) need to as well.
 pub use cls_wl_diff::IrGraphDiff;
 
@@ -36,6 +36,9 @@ pub struct ReportInputs<'a> {
     /// any `fusion_opportunities` already stored on the artifact — but the CLI runs the analyzer and
     /// hands the result in, because the capture stores graphs, not fusion results (they are derived).
     pub fusion: Option<&'a [FusionOpportunity]>,
+    /// The base artifact (the `--base` side), so the IR-diff section can show *what* changed in each
+    /// modified node and *where* in source. `None` outside `--base` mode.
+    pub diff_base: Option<&'a ClsArtifact>,
 }
 
 /// Render a session artifact into a self-contained HTML report. The optional analyses in `inputs`
@@ -45,7 +48,7 @@ pub fn render(artifact: &ClsArtifact, inputs: &ReportInputs) -> String {
     let mut sections = String::new();
     sections.push_str(&metadata_section(&artifact.session));
     if let Some(d) = inputs.diff {
-        sections.push_str(&ir_diff_section(d));
+        sections.push_str(&ir_diff_section(d, artifact, inputs.diff_base));
     }
     sections.push_str(&recompile_section(artifact));
     sections.push_str(&cache_stability_section(artifact));
@@ -147,6 +150,25 @@ fn recompile_section(artifact: &ClsArtifact) -> String {
         findings.total_recompilations,
         findings.guard_categories.len(),
     );
+    // Point at the recompiling region's source (the same compiled function for every recompile),
+    // read straight off the artifact — torch's log carries it.
+    if let Some(r) = artifact
+        .recompilations
+        .iter()
+        .find(|r| r.source_location.as_ref().is_some_and(|l| l.file.is_some()))
+    {
+        let loc = r.source_location.as_ref().unwrap();
+        let line = loc.line.map_or_else(String::new, |n| format!(":{n}"));
+        body.push_str(&format!(
+            "<p class=\"muted\">Recompiling <code>{}</code> at <code>{}{}</code>.</p>",
+            esc(r
+                .compiled_function_id
+                .as_deref()
+                .unwrap_or("the compiled region")),
+            esc(loc.file.as_deref().unwrap_or("")),
+            line,
+        ));
+    }
     body.push_str(
         "<table>\n<thead><tr><th>category</th><th>count</th><th>axis</th>\
          <th>observed values</th></tr></thead>\n<tbody>\n",
@@ -197,7 +219,7 @@ fn recompile_section(artifact: &ClsArtifact) -> String {
 /// The base→head compile diff (Tool 2a) — the report's pillar in `--base` mode. Renders the added /
 /// removed / modified nodes plus two quality gauges (match coverage, anchor uniqueness) so the
 /// reader can weigh how much to trust the structural verdict.
-fn ir_diff_section(diff: &IrGraphDiff) -> String {
+fn ir_diff_section(diff: &IrGraphDiff, head: &ClsArtifact, base: Option<&ClsArtifact>) -> String {
     let (added, removed, modified) = (diff.added.len(), diff.removed.len(), diff.modified.len());
     let headline = if added == 0 && removed == 0 && modified == 0 {
         "<p class=\"good\">No structural change — the compiled graph is identical between base and \
@@ -216,11 +238,12 @@ fn ir_diff_section(diff: &IrGraphDiff) -> String {
         Some(&pct(diff.anchor_uniqueness_ratio)),
     ));
     quality.push_str("</dl>");
+    let base_nodes = base.map(first_graph_nodes).unwrap_or(&[]);
     let lists = format!(
         "{}{}{}",
         node_list("added", &diff.added),
         node_list("removed", &diff.removed),
-        modified_table(diff),
+        modified_table(diff, first_graph_nodes(head), base_nodes),
     );
     section(
         "ir-diff",
@@ -246,7 +269,67 @@ fn node_list(label: &str, nodes: &[String]) -> String {
 }
 
 /// Modified `(base, head)` pairs as a table, annotated with the matcher's `[0, 1]` confidence.
-fn modified_table(diff: &IrGraphDiff) -> String {
+/// Nodes of an artifact's first compiled graph, or an empty slice.
+fn first_graph_nodes(artifact: &ClsArtifact) -> &[FxNode] {
+    artifact
+        .compiled_graphs
+        .first()
+        .map_or(&[], |g| g.nodes.as_slice())
+}
+
+fn node_map(nodes: &[FxNode]) -> std::collections::HashMap<&str, &FxNode> {
+    nodes.iter().map(|n| (n.id.as_str(), n)).collect()
+}
+
+/// `"file:line"` for a node that carried a captured source location, else `None`.
+fn node_source(node: &FxNode) -> Option<String> {
+    match (node.source_file.as_deref(), node.source_line) {
+        (Some(f), Some(l)) => Some(format!("{f}:{l}")),
+        _ => None,
+    }
+}
+
+/// A short, human description of how `base` became `head` — the *cause* of the diff. Distinguishes
+/// an operand reorder (same inputs, different order) from a changed input set, surfaces attribute
+/// value changes (the meaningful ones — a constant flipped), and an op-type change.
+fn node_changes(base: &FxNode, head: &FxNode) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if base.op_type != head.op_type {
+        parts.push(format!("op `{}` → `{}`", base.op_type, head.op_type));
+    }
+    if base.inputs != head.inputs {
+        let (mut b, mut h) = (base.inputs.clone(), head.inputs.clone());
+        b.sort();
+        h.sort();
+        parts.push(
+            if b == h {
+                "operands reordered"
+            } else {
+                "inputs changed"
+            }
+            .to_string(),
+        );
+    }
+    for (k, hv) in &head.attrs {
+        match base.attrs.get(k) {
+            Some(bv) if bv != hv => parts.push(format!("attr `{k}`: {bv} → {hv}")),
+            None => parts.push(format!("attr `{k}` added ({hv})")),
+            _ => {}
+        }
+    }
+    for k in base.attrs.keys() {
+        if !head.attrs.contains_key(k) {
+            parts.push(format!("attr `{k}` removed"));
+        }
+    }
+    if parts.is_empty() {
+        "content changed".to_string()
+    } else {
+        parts.join("; ")
+    }
+}
+
+fn modified_table(diff: &IrGraphDiff, head_nodes: &[FxNode], base_nodes: &[FxNode]) -> String {
     if diff.modified.is_empty() {
         return String::new();
     }
@@ -255,18 +338,32 @@ fn modified_table(diff: &IrGraphDiff) -> String {
         .iter()
         .map(|(base, _head, c)| (base.as_str(), *c))
         .collect();
+    let head_map = node_map(head_nodes);
+    let base_map = node_map(base_nodes);
     let mut rows = String::new();
     for (base, head) in &diff.modified {
         let c = confidence.get(base.as_str()).copied().unwrap_or(0.0);
+        let head_node = head_map.get(head.as_str());
+        let change = match (base_map.get(base.as_str()), head_node) {
+            (Some(b), Some(h)) => node_changes(b, h),
+            _ => "content changed".to_string(),
+        };
+        let where_ = head_node
+            .and_then(|h| node_source(h))
+            .unwrap_or_else(|| "—".to_string());
+        let op = head_node.map_or("", |h| h.op_type.as_str());
         rows.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{c:.2}</td></tr>\n",
-            esc(base),
+            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><code>{}</code></td>\
+             <td>{c:.2}</td></tr>\n",
             esc(head),
+            esc(op),
+            esc(&change),
+            esc(&where_),
         ));
     }
     format!(
-        "<h3>modified ({})</h3>\n<table>\n<thead><tr><th>base</th><th>head</th>\
-         <th>confidence</th></tr></thead>\n<tbody>\n{rows}</tbody>\n</table>\n",
+        "<h3>modified ({})</h3>\n<table>\n<thead><tr><th>node</th><th>op</th><th>what changed</th>\
+         <th>where</th><th>confidence</th></tr></thead>\n<tbody>\n{rows}</tbody>\n</table>\n",
         diff.modified.len(),
     )
 }
@@ -518,6 +615,26 @@ fn dim(v: Option<u64>) -> String {
     v.map(|n| n.to_string()).unwrap_or_else(|| "?".to_string())
 }
 
+/// A human label for a fusion pattern id — the chain it matches.
+fn pattern_label(id: &str) -> &str {
+    match id {
+        "A" => "GEMM → +resid → RMSNorm → GEMM",
+        other => other,
+    }
+}
+
+/// Bytes as a compact `KiB`/`MiB` string. The raw count is the model's evidence; this is the
+/// human-facing form so the report leads with magnitude, not a scientific-notation byte count.
+fn humanize_bytes(b: f64) -> String {
+    if b >= 1024.0 * 1024.0 {
+        format!("{:.1} MiB", b / (1024.0 * 1024.0))
+    } else if b >= 1024.0 {
+        format!("{:.0} KiB", b / 1024.0)
+    } else {
+        format!("{b:.0} B")
+    }
+}
+
 fn fusion_section(artifact: &ClsArtifact, analyzed: Option<&[FusionOpportunity]>) -> String {
     // Prefer the freshly-analyzed opportunities the CLI hands in (Tool 6 derives them from the
     // captured graphs); fall back to any stored on the artifact for a bare render.
@@ -526,42 +643,116 @@ fn fusion_section(artifact: &ClsArtifact, analyzed: Option<&[FusionOpportunity]>
         return section(
             "fusion",
             "Fusion opportunities (CODA)",
-            "<p class=\"muted\">No algebraic fusion opportunities found.</p>",
+            "<p class=\"good\">No algebraic fusion opportunities found.</p>",
         );
     }
-    let mut body = String::from(
-        "<p class=\"muted\">Analytical HBM-traffic roofline (memory-bound upper bound, not \
-         measured); suggest-only.</p>\n\
-         <table>\n<thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th>\
-         <th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested fusion</th>\
-         </tr></thead>\n<tbody>\n",
-    );
-    for f in opportunities {
-        let shape = f.shape.as_ref().map_or_else(
+
+    let where_of = |f: &FusionOpportunity| -> String {
+        f.location
+            .as_ref()
+            .and_then(|l| l.src_lineno_range.clone())
+            .unwrap_or_else(|| "—".to_string())
+    };
+    let shape_of = |f: &FusionOpportunity| -> String {
+        f.shape.as_ref().map_or_else(
             || "—".to_string(),
-            |s| format!("{}×{}×{}×{}", dim(s.m), dim(s.n), dim(s.k0), dim(s.k1),),
+            |s| format!("{}×{}×{}×{}", dim(s.m), dim(s.n), dim(s.k0), dim(s.k1)),
+        )
+    };
+    let speedup_key = |f: &FusionOpportunity| -> String {
+        f.estimated_speedup
+            .map_or_else(|| "—".to_string(), |s| format!("{s:.2}×"))
+    };
+
+    // Group exact-duplicate opportunities (same pattern, source, shape, speedup) so N identical
+    // blocks render as one ×N row rather than N identical ones. First-seen order is preserved.
+    struct Row<'a> {
+        key: String,
+        count: usize,
+        opp: &'a FusionOpportunity,
+    }
+    let mut rows: Vec<Row> = Vec::new();
+    for f in opportunities {
+        let key = format!(
+            "{}|{}|{}|{}",
+            f.pattern_id,
+            where_of(f),
+            shape_of(f),
+            speedup_key(f)
         );
-        let hbm = format!(
-            "{} → {}",
-            f.baseline_hbm_bytes
-                .map_or_else(|| "?".to_string(), |b| format!("{b:.3e}")),
-            f.fused_hbm_bytes
-                .map_or_else(|| "?".to_string(), |b| format!("{b:.3e}")),
-        );
+        if let Some(r) = rows.iter_mut().find(|r| r.key == key) {
+            r.count += 1;
+        } else {
+            rows.push(Row {
+                key,
+                count: 1,
+                opp: f,
+            });
+        }
+    }
+
+    let mut body = String::from(
+        "<p class=\"muted\">Algebraic fusions Inductor leaves unfused — opportunities, not applied \
+         changes. The speedup is an analytical memory-bound <strong>upper bound for ranking</strong> \
+         (real is ~1.05–1.15×); applying one means a fused epilogue kernel.</p>\n\
+         <table>\n<thead><tr><th>pattern</th><th>where</th><th>shape (M×N×K0×K1)</th>\
+         <th>HBM saved</th><th>≤ speedup</th></tr></thead>\n<tbody>\n",
+    );
+    for r in &rows {
+        let f = r.opp;
+        let saved = match (f.baseline_hbm_bytes, f.fused_hbm_bytes) {
+            (Some(b), Some(fused)) if b > 0.0 => format!(
+                "↓{:.0}% ({} → {})",
+                (1.0 - fused / b) * 100.0,
+                humanize_bytes(b),
+                humanize_bytes(fused)
+            ),
+            _ => "—".to_string(),
+        };
         let speedup = f
             .estimated_speedup
-            .map_or_else(|| "—".to_string(), |s| format!("{s:.2}×"));
+            .map_or_else(|| "—".to_string(), |s| format!("≤ {s:.2}×"));
+        let count = if r.count > 1 {
+            format!(" <span class=\"muted\">×{}</span>", r.count)
+        } else {
+            String::new()
+        };
         body.push_str(&format!(
-            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><strong>{}</strong></td>\
-             <td>{}</td></tr>\n",
-            esc(&f.pattern_id),
-            esc(&shape),
-            esc(&hbm),
+            "<tr><td>{}{}</td><td><code>{}</code></td><td>{}</td><td>{}</td>\
+             <td><strong>{}</strong></td></tr>\n",
+            esc(pattern_label(&f.pattern_id)),
+            count,
+            esc(&where_of(f)),
+            esc(&shape_of(f)),
+            esc(&saved),
             esc(&speedup),
-            esc(f.suggested_fusion.as_deref().unwrap_or("—")),
         ));
     }
     body.push_str("</tbody>\n</table>\n");
+
+    // "What to change / how to apply" — one line per distinct suggested fusion, then the shared
+    // honest caveat. This is where the section turns from "here's a number" into "here's the move".
+    let mut seen: Vec<&str> = Vec::new();
+    for f in opportunities {
+        if let Some(s) = f.suggested_fusion.as_deref() {
+            if !seen.contains(&s) {
+                seen.push(s);
+            }
+        }
+    }
+    for s in &seen {
+        body.push_str(&format!(
+            "<p><strong>What to change:</strong> {} — so the normalized activation never \
+             round-trips HBM between the norm and the second GEMM.</p>\n",
+            esc(s)
+        ));
+    }
+    body.push_str(
+        "<p class=\"muted\"><strong>How to apply:</strong> suggest-only — implement with a fused \
+         epilogue kernel (a Triton or CUTLASS epilogue), or check whether \
+         <code>torch.compile</code>'s max-autotune already performs it. This tool reads the graph; \
+         it never rewrites it or runs a kernel.</p>\n",
+    );
     section("fusion", "Fusion opportunities (CODA)", &body)
 }
 

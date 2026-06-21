@@ -17,7 +17,9 @@ against its baseline (Tool 2a), an **eager-vs-compiled divergence** localized to
 disagrees (Tool 3), an **in-place-on-alias** correctness risk from a static scan (Tool 4), and three
 **`Pattern A` fusion** opportunities Inductor left on the table (Tool 6) — plus an honest "cache
 stable" check and a roofline section that states it needs a GPU capture. One capture; the cross-tool
-triage that would have cost an afternoon of `TORCH_LOGS` scrolling and manual diffing, on one page.
+triage that would have cost an afternoon of `TORCH_LOGS` scrolling and manual diffing, on one page —
+and every finding points at the exact source line to change (the diff names *what* changed and where,
+fusion shows the chain and what to fold, recompile locates the compiled region).
 Regenerate it with `./scripts/render_hero.sh`.
 
 ---

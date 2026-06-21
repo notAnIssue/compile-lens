@@ -120,7 +120,8 @@
           }
         },
         "occurred_at_step": { "type": "integer", "minimum": 0 },
-        "wall_clock_ms": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] }
+        "wall_clock_ms": { "anyOf": [{ "type": "number", "minimum": 0 }, { "$ref": "#/$defs/nonFiniteFloat" }] },
+        "source_location": { "$ref": "#/$defs/SourceLocation" }
       }
     },
 
@@ -150,7 +151,9 @@
         "inputs": { "type": "array", "items": { "type": "string" }, "description": "Ordered ids of upstream nodes this one consumes. Order is load-bearing: sub(a,b) != sub(b,a)." },
         "attrs": { "type": "object", "additionalProperties": true, "description": "Node attributes (a constant's value, a dim parameter, …); a difference here makes the diff classify a node as modified." },
         "out_shape": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Output tensor shape, when a concrete one was captured from node.meta['val']. Omitted when unknown (meta absent, not a single tensor, or a dynamic/symbolic shape). Read by Tool 6's cost model (ADR-038)." },
-        "out_dtype": { "type": "string", "description": "Output dtype as a torch name without the torch. prefix (bfloat16, float32); omitted under the same conditions as out_shape." }
+        "out_dtype": { "type": "string", "description": "Output dtype as a torch name without the torch. prefix (bfloat16, float32); omitted under the same conditions as out_shape." },
+        "source_file": { "type": "string", "description": "Source file of the node's defining line (innermost user frame of node.meta['stack_trace']), path-normalized at collection; omitted when unavailable." },
+        "source_line": { "type": "integer", "minimum": 0, "description": "1-based line of the node's defining source, paired with source_file." }
       }
     },
 

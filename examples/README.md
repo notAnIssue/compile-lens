@@ -23,7 +23,7 @@ the current renderer, so there is nothing to build or install — open it in a b
 ./scripts/render_hero.sh        # writes examples/hero.html
 ```
 
-What the report shows — one capture, the whole cross-tool triage:
+What the report shows — one capture, the whole cross-tool triage, **each finding located in source**:
 
 - **Recompile (Tool 1).** Three recompiles attributed to the changing batch axis, with the
   `torch._dynamo.mark_dynamic` fix.

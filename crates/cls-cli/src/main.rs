@@ -505,15 +505,15 @@ fn session_report(
     // In `--base` mode, compute the base→head compile diff (Tool 2a) and render it as the pillar
     // IR Diff section. We diff the first compiled graph on each side, matching `cl diff`; an
     // artifact with no compiled graph diffs as an empty graph rather than erroring.
-    let diff = match &base {
-        Some(base_path) => {
-            let base_artifact = cls_schema_migrate::load_artifact(base_path)?;
-            let before = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&base_artifact));
-            let after = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&artifact));
-            Some(cls_wl_diff::diff_graphs(&before, &after))
-        }
+    let base_artifact = match &base {
+        Some(base_path) => Some(cls_schema_migrate::load_artifact(base_path)?),
         None => None,
     };
+    let diff = base_artifact.as_ref().map(|base_art| {
+        let before = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(base_art));
+        let after = cls_wl_diff::FxGraph::from_nodes(first_graph_nodes(&artifact));
+        cls_wl_diff::diff_graphs(&before, &after)
+    });
     // Lint escalates only with a `--db`; without one the renderer shows the raw candidates and how
     // to escalate (an empty DB would silently drop every candidate, so we don't analyze at all).
     let lint = match db.as_deref() {
@@ -535,6 +535,7 @@ fn session_report(
         lint: lint.as_ref(),
         roofline: Some(&roofline),
         fusion: Some(&fusion),
+        diff_base: base_artifact.as_ref(),
     };
     let html = cls_report::render(&artifact, &inputs);
     match output {

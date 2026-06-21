@@ -141,6 +141,9 @@ class Recompilation(_Model):
     failed_guard: FailedGuard | None = None
     occurred_at_step: int | None = None
     wall_clock_ms: NonFiniteFloat | None = None
+    #: Source file:line of the recompiled function (the compiled region), parsed from torch's
+    #: recompile log; lets the summary point at where the recompiling region is defined.
+    source_location: SourceLocation | None = None
 
 
 class FxNode(_Model):
@@ -162,6 +165,12 @@ class FxNode(_Model):
     #: Output dtype as a torch name without the ``torch.`` prefix (``bfloat16``); absent under the
     #: same conditions as ``out_shape``.
     out_dtype: str | None = None
+    #: Source file of the node's defining line — the innermost user frame of
+    #: ``node.meta['stack_trace']``, path-normalized at collection. Absent when unavailable; lets
+    #: the diff/fusion sections point a finding at the exact source.
+    source_file: str | None = None
+    #: 1-based line of the node's defining source, paired with ``source_file``.
+    source_line: int | None = None
 
 
 class CompiledGraph(_Model):

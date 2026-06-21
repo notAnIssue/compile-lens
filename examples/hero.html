@@ -21,16 +21,16 @@
 <summary><h2>IR Diff (base → head)</h2></summary>
 <div class="body"><p class="warn">The compiled graph changed: <strong>0</strong> added, <strong>0</strong> removed, <strong>1</strong> modified node(s).</p><dl class="meta"><dt>match coverage</dt><dd>100%</dd><dt>anchor uniqueness</dt><dd>100%</dd></dl><h3>modified (1)</h3>
 <table>
-<thead><tr><th>base</th><th>head</th><th>confidence</th></tr></thead>
+<thead><tr><th>node</th><th>op</th><th>what changed</th><th>where</th><th>confidence</th></tr></thead>
 <tbody>
-<tr><td><code>sub</code></td><td><code>sub</code></td><td>1.00</td></tr>
+<tr><td><code>sub</code></td><td>aten.sub.Tensor</td><td>operands reordered</td><td><code>{repo}/examples/hero_scene.py:89</code></td><td>1.00</td></tr>
 </tbody>
 </table>
 </div>
 </details>
 <details open id="recompile">
 <summary><h2>Recompile summary</h2></summary>
-<div class="body"><p><strong>3</strong> recompilation(s), across <strong>1</strong> guard categor(y/ies).</p><table>
+<div class="body"><p><strong>3</strong> recompilation(s), across <strong>1</strong> guard categor(y/ies).</p><p class="muted">Recompiling <code>forward</code> at <code>{repo}/examples/hero_scene.py:86</code>.</p><table>
 <thead><tr><th>category</th><th>count</th><th>axis</th><th>observed values</th></tr></thead>
 <tbody>
 <tr><td>size</td><td>3</td><td><code>x[0]</code></td><td>16→32, 16→64, 16→128</td></tr>
@@ -51,7 +51,7 @@
 <div class="body"><table>
 <thead><tr><th>first divergent layer</th><th>max abs diff</th><th>layers compared</th><th>attributed cause</th></tr></thead>
 <tbody>
-<tr><td><code>blocks.0.norm</code></td><td>5.033e0</td><td>2</td><td>—</td></tr>
+<tr><td><code>blocks.0.norm</code></td><td>5.033e0</td><td>2</td><td>first divergence in a RMSNorm layer — toggle inductor passes (causal attribution) to find the responsible one</td></tr>
 </tbody>
 </table>
 </div>
@@ -69,15 +69,15 @@
 </details>
 <details open id="fusion">
 <summary><h2>Fusion opportunities (CODA)</h2></summary>
-<div class="body"><p class="muted">Analytical HBM-traffic roofline (memory-bound upper bound, not measured); suggest-only.</p>
+<div class="body"><p class="muted">Algebraic fusions Inductor leaves unfused — opportunities, not applied changes. The speedup is an analytical memory-bound <strong>upper bound for ranking</strong> (real is ~1.05–1.15×); applying one means a fused epilogue kernel.</p>
 <table>
-<thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th><th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested fusion</th></tr></thead>
+<thead><tr><th>pattern</th><th>where</th><th>shape (M×N×K0×K1)</th><th>HBM saved</th><th>≤ speedup</th></tr></thead>
 <tbody>
-<tr><td><code>A</code></td><td>16×256×64×64</td><td>2.703e5 → 1.888e5</td><td><strong>1.43×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
-<tr><td><code>A</code></td><td>16×256×64×64</td><td>2.703e5 → 1.888e5</td><td><strong>1.43×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
-<tr><td><code>A</code></td><td>16×256×64×64</td><td>2.703e5 → 1.888e5</td><td><strong>1.43×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
+<tr><td>GEMM → +resid → RMSNorm → GEMM <span class="muted">×3</span></td><td><code>{repo}/examples/hero_scene.py:69-72</code></td><td>16×256×64×64</td><td>↓30% (264 KiB → 184 KiB)</td><td><strong>≤ 1.43×</strong></td></tr>
 </tbody>
 </table>
+<p><strong>What to change:</strong> fold per-row 1/rms into the second GEMM epilogue — so the normalized activation never round-trips HBM between the norm and the second GEMM.</p>
+<p class="muted"><strong>How to apply:</strong> suggest-only — implement with a fused epilogue kernel (a Triton or CUTLASS epilogue), or check whether <code>torch.compile</code>'s max-autotune already performs it. This tool reads the graph; it never rewrites it or runs a kernel.</p>
 </div>
 </details>
 <details open id="roofline">

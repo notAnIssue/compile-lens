@@ -20,6 +20,8 @@ fn node(id: &str, op_type: &str, inputs: &[&str]) -> FxNode {
         attrs: Default::default(),
         out_shape: Vec::new(),
         out_dtype: None,
+        source_file: None,
+        source_line: None,
     }
 }
 

@@ -108,8 +108,20 @@ class DivergenceSession:
         return sorted(set(self.eager_activations) & set(self.compiled_activations))
 
     def report(self, rtol: float = 1e-3, atol: float = 1e-5) -> DivergenceFindings:
-        """Localize the first layer where eager and compiled activations diverge."""
-        return localize_divergence(self.eager_activations, self.compiled_activations, rtol, atol)
+        """Localize the first layer where eager and compiled activations diverge, annotating it with
+        the divergent layer's module type (so the report names *what kind* of layer broke, and the
+        next step) when the causal experiment has not supplied a cause."""
+        findings = localize_divergence(
+            self.eager_activations, self.compiled_activations, rtol, atol
+        )
+        if findings.first_divergent_layer is not None and findings.suggested_cause is None:
+            module_type = _module_type(self._eager, findings.first_divergent_layer)
+            if module_type is not None:
+                findings.suggested_cause = (
+                    f"first divergence in a {module_type} layer — toggle inductor passes "
+                    "(causal attribution) to find the responsible one"
+                )
+        return findings
 
 
 def _make_hook(name: str, store: dict[str, Any]) -> Any:
@@ -204,6 +216,16 @@ def accuracy_minifier() -> Iterator[MinifierStatus]:
     finally:
         dynamo_config.repro_level = prev_level
         dynamo_config.repro_after = prev_after
+
+
+def _module_type(model: Any, qualified_name: str) -> str | None:
+    """The class name of the submodule at ``qualified_name`` (e.g. ``"RMSNorm"``), unwrapping a
+    ``torch.compile`` wrapper. ``None`` if it cannot be resolved."""
+    target = getattr(model, "_orig_mod", model)
+    try:
+        return type(target.get_submodule(qualified_name)).__name__
+    except Exception:
+        return None
 
 
 def divergence_session(model_eager: Any, model_compiled: Any) -> DivergenceSession:
