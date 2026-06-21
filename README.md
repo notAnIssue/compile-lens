@@ -8,18 +8,23 @@
 <!-- hero-shot-placeholder: a screenshot of examples/hero.html lands here — open that committed
      report in a browser and screenshot the top. -->
 
-A worked **hero report** lives at [`examples/hero.html`](./examples/hero.html) — one capture, both
-headline stories in one self-contained offline HTML. **Open it directly; no build, no install.** It
-renders a base→head pair whose only difference is a silent sign-flip bug: the **IR Diff** section
-recovers it as exactly one `modified` node at 100% confidence (the regression-governance pillar),
-and the **CODA fusion** section flags three `Pattern A` opportunities (the crown jewel). Regenerate
-it any time with `./scripts/render_hero.sh`.
+A worked **hero report** lives at [`examples/hero.html`](./examples/hero.html) — **one `cl.capture()`
+call** over a single `torch.compile` workload, rendered to one self-contained offline HTML. **Open it
+directly; no build, no install.** The model has several real problems at once, the way a messy PR
+does, and the report surfaces each in its own section: a **recompile storm** attributed to a changing
+batch axis (Tool 1), a silent **sign-flip regression** recovered as exactly one `modified` node
+against its baseline (Tool 2a), an **eager-vs-compiled divergence** localized to the first layer that
+disagrees (Tool 3), an **in-place-on-alias** correctness risk from a static scan (Tool 4), and three
+**`Pattern A` fusion** opportunities Inductor left on the table (Tool 6) — plus an honest "cache
+stable" check and a roofline section that states it needs a GPU capture. One capture; the cross-tool
+triage that would have cost an afternoon of `TORCH_LOGS` scrolling and manual diffing, on one page.
+Regenerate it with `./scripts/render_hero.sh`.
 
 ---
 
 ## What's in the box
 
-One Python context manager captures a `torch.compile` run; six analyzers read that capture and a seventh surface renders them into a single self-contained HTML report. Everything below is implemented and tested on `main` (the v0.5.0 release tag + PyPI wheel are pending — see [Roadmap](#roadmap)).
+`cl.capture()` drives every collector over one `torch.compile` workload in a single call; the analyzers read what it captured and one surface renders them into a self-contained HTML report. (`cl.session()` is a lighter, passive form that captures the recompile log only — see [Quick example](#quick-example).) Everything below is implemented and tested on `main` (the v0.5.0 release tag + PyPI wheel are pending — see [Roadmap](#roadmap)).
 
 | | Surface | What it answers |
 |---|---|---|
@@ -30,7 +35,7 @@ One Python context manager captures a `torch.compile` run; six analyzers read th
 | **Tool 4** | `cl compile-lint` | Static correctness-pattern candidates escalated against a cited-issue database; `--format sarif` for GitHub Code Scanning, exit 1 on a surviving `high` finding so it can gate CI. |
 | **Tool 5** | `cl kernel-roofline` | A three-layer roofline per kernel (theoretical bound → empirical predictor → autotune-pruning decision) against a GPU spec. |
 | **Tool 6** | `cl fusion-detect` | Algebraic fusion opportunities Inductor leaves on the table (the CODA `GEMM-Residual-RMSNorm-GEMM` pattern), with an analytical HBM-traffic estimate. Suggest-only. |
-| **Hero** | `cl.session()` → HTML | One context manager → one self-contained, offline HTML report aggregating all of the above. |
+| **Hero** | `cl.capture()` → HTML | One call drives every collector over your model → one self-contained, offline HTML report aggregating all of the above. |
 | **Share** | `cl scrub` | Sanitize an artifact or report before sharing — promote it to a stricter redaction level (paths / argv tokens / kernel sources / host), or `--verify` that it is share-safe. |
 
 It **wraps** the official PyTorch tooling rather than re-implementing it, and is explicitly **not** a replacement for `torch.compile`, a fuzzer, a correctness oracle, or a competing compiler.
@@ -43,7 +48,7 @@ Python captures (it is the only side that touches `torch.compile`); Rust analyze
 
 ```mermaid
 flowchart LR
-    sess["cl.session()<br/>(Python capture)"] --> art[".cls.json<br/>schema contract"]
+    cap["cl.capture()<br/>(Python capture)"] --> art[".cls.json<br/>schema contract"]
     art --> an["Rust analyzers<br/>Tools 1–6"]
     an --> report["cls-report<br/>→ HTML"]
     report --> scrub["cl scrub<br/>→ share-safe"]
@@ -57,14 +62,24 @@ Full diagrams (data flow, schema ER, roadmap) in [`docs/01_architecture.md`](./d
 
 ```python
 import compile_lens as cl
-import torch
 
-model = torch.compile(MyModel())
+result = cl.capture(
+    model,
+    example_input,
+    base=baseline_model,           # optional: adds the base→head IR-diff section
+    vary_inputs=[x_seq16, x_seq32], # optional: drives the recompile section
+    source="my_model.py",          # optional: static lint scan
+    check_divergence=True,          # optional: eager-vs-compiled localization
+)
+result.report().save_html("report.html")   # one self-contained HTML, every captured tool's findings
+```
 
-with cl.session() as s:
-    output = model(example_input)
+For just the recompile log with zero setup, the lighter passive form wraps your own call:
 
-s.report().save_html("report.html")   # one self-contained HTML, every tool's findings
+```python
+with cl.session() as s:        # captures the recompile log only
+    model(example_input)
+s.report().save_html("report.html")
 ```
 
 Before sharing the report (in a PR, a Show HN, a bug thread), sanitize it:

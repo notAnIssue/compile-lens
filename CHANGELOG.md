@@ -9,12 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `examples/` — a reproducible hero-report demo. `examples/hero_scene.py` captures a base/head pair
-  (three `GEMM-Residual-RMSNorm-GEMM` blocks + an affine tail whose subtraction operands are flipped
-  in the head — a silent sign bug); the committed, `public-safe`-scrubbed artifacts render a single
-  report showing both the IR-diff pillar (the swap recovered as one `modified` node at 100%
-  confidence) and the CODA fusion crown jewel (three `Pattern A` opportunities). Re-rendering needs
-  no PyTorch; re-capturing does.
+- `cl.capture(model, example_input, …)` — the active, one-call capture (ADR-041). Where
+  `cl.session()` is a passive context manager that only tees the recompile log, `cl.capture()` takes
+  the model and drives every built collector in one call — graph capture (fusion / diff), the
+  per-iteration cache probe, the recompile log under shape variation, a static lint scan, and
+  eager-vs-compiled divergence localization — assembling one `.cls.json` the report renders end to
+  end. Recompiles are captured at the dynamo level (`backend="eager"`) so the probe is fast and
+  isolated from any inductor pass; divergence is never fabricated (a clean model reports none).
+- `examples/` — a reproducible hero-report demo built on `cl.capture()`. `examples/hero_scene.py`
+  drives one realistic `torch.compile` workload carrying several real faults at once — a base/head
+  sign regression, a miscompiling custom post-grad pass, an in-place-on-alias risk, and
+  shape-varying recompiles — so the committed report lights up five sections with real findings
+  (recompile, IR-diff, divergence, lint, fusion) plus an honest cache-stable check and a GPU-needed
+  roofline note. Re-rendering needs no PyTorch; re-capturing does.
 
 ### Fixed
 
