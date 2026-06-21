@@ -27,5 +27,5 @@ criterion = { version = "0.8", default-features = false }
 # share-time scrub agrees with the collect-time redactor; `sha2`/`hex` match Python
 # `hashlib.sha256` so the FQDN host hash is identical across both halves of the toolkit.
 regex = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
