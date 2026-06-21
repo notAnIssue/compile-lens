@@ -198,6 +198,17 @@ def capture(
 
     # ── recompile storm (Tool 1) ────────────────────────────────────────────────────────────
     recompilations = _capture_recompiles(model, vary_inputs) if vary_inputs else []
+    # The recompile log carries raw source paths; redact them the way the collectors do at their
+    # finalize (D11) — this artifact is assembled here, not through a collector's finalize.
+    if recompilations:
+        from compile_lens.security import redactor  # noqa: PLC0415
+
+        if redactor.is_strict(RedactionPolicy(redaction_policy)):
+            repo = Path.cwd().name
+            for rec in recompilations:
+                loc = rec.source_location
+                if loc is not None and loc.file is not None:
+                    loc.file = redactor.normalize_path(loc.file, repo=repo)
 
     # ── lint scan (Tool 4) ──────────────────────────────────────────────────────────────────
     lint_findings = []

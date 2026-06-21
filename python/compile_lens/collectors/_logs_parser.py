@@ -33,7 +33,7 @@ import re
 
 import structlog
 
-from compile_lens._schema import FailedGuard, Recompilation
+from compile_lens._schema import FailedGuard, Recompilation, SourceLocation
 
 _log = structlog.get_logger("compile_lens.collectors._logs_parser")
 
@@ -103,6 +103,8 @@ def parse_recompiles_log(text: str) -> list[Recompilation]:
     # Accumulator for the block currently being read: (compile_id, function, failures).
     compile_id: str | None = None
     function: str | None = None
+    source_file: str | None = None
+    source_line: int | None = None
     failures: list[tuple[str, str, str | None, str | None]] = []
 
     def _flush() -> None:
@@ -119,6 +121,9 @@ def parse_recompiles_log(text: str) -> list[Recompilation]:
                 new_value=new,
             )
         counter = compile_id.rsplit("/", 1)[-1]
+        source_location = (
+            SourceLocation(file=source_file, line=source_line) if source_file is not None else None
+        )
         recompilations.append(
             Recompilation(
                 recompilation_id=compile_id,
@@ -126,6 +131,7 @@ def parse_recompiles_log(text: str) -> list[Recompilation]:
                 trigger_reason="guard_failure",
                 failed_guard=failed_guard,
                 occurred_at_step=int(counter) if counter.isdigit() else None,
+                source_location=source_location,
             )
         )
 
@@ -141,6 +147,8 @@ def parse_recompiles_log(text: str) -> list[Recompilation]:
             cid = _COMPILE_ID_RE.search(line)
             compile_id = cid.group(1) if cid is not None else None
             function = recompiling.group(1)
+            source_file = recompiling.group(2)
+            source_line = int(recompiling.group(3))
             failures = []
             continue
 

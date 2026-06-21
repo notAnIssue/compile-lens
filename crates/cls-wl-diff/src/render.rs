@@ -122,6 +122,8 @@ mod tests {
             attrs: Default::default(),
             out_shape: Vec::new(),
             out_dtype: None,
+            source_file: None,
+            source_line: None,
         }
     }
 

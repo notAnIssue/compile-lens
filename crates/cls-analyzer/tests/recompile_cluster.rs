@@ -46,6 +46,7 @@ fn rec(id: &str, expr: &str, prev: &str, new: &str) -> Recompilation {
         }),
         occurred_at_step: Some(1),
         wall_clock_ms: None,
+        source_location: None,
     }
 }
 

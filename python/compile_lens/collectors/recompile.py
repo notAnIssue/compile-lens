@@ -198,6 +198,10 @@ class RecompileCollector:
                     graph.inductor_ir_path = redactor.normalize_path(
                         graph.inductor_ir_path, repo=repo
                     )
+            for rec in self._recompilations:
+                loc = rec.source_location
+                if loc is not None and loc.file is not None:
+                    loc.file = redactor.normalize_path(loc.file, repo=repo)
 
         # graph_breaks defaults to [] in the schema; pass it only when non-empty so the
         # exclude_unset serializer keeps a Mode-A/B artifact byte-identical to before.

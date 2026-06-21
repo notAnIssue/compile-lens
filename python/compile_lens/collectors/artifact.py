@@ -24,6 +24,7 @@ the capture path; constructing the collector and finalizing an artifact never im
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -117,6 +118,27 @@ def _tensor_meta(node: Any) -> tuple[list[int], str | None]:
     return dims, str(dtype).removeprefix("torch.")
 
 
+_FRAME_RE = re.compile(r'File "([^"]+)", line (\d+)')
+
+
+def _node_source(node: Any) -> tuple[str | None, int | None]:
+    """The node's defining source position from ``node.meta['stack_trace']``.
+
+    The trace is the user-visible call stack at trace time (outermost → innermost). We take the
+    innermost frame that is *not* torch / library internals, so the location points at the user's
+    model code (the line that issued the op) rather than into ``torch/nn/functional.py``. Returns
+    ``(None, None)`` when no trace was recorded — a graceful miss, not an error."""
+    trace = (getattr(node, "meta", None) or {}).get("stack_trace")
+    if not trace:
+        return None, None
+    frames = _FRAME_RE.findall(trace)
+    if not frames:
+        return None, None
+    user = [(f, ln) for (f, ln) in frames if "site-packages" not in f and "/torch/" not in f]
+    file, line = user[-1] if user else frames[-1]
+    return file, int(line)
+
+
 def _serialize_node(node: Any, node_cls: type) -> FxNode:
     """Serialize one FX node to the contract: ordered input ids from the node references in its
     args then kwargs, and scalar constants captured as attrs keyed by position / kwarg name.
@@ -145,6 +167,11 @@ def _serialize_node(node: Any, node_cls: type) -> FxNode:
         fields["out_shape"] = out_shape
     if out_dtype is not None:
         fields["out_dtype"] = out_dtype
+    source_file, source_line = _node_source(node)
+    if source_file is not None:
+        fields["source_file"] = source_file
+    if source_line is not None:
+        fields["source_line"] = source_line
     return FxNode(**fields)
 
 
@@ -365,6 +392,9 @@ class CompileArtifactCollector:
                     graph.inductor_ir_path = redactor.normalize_path(
                         graph.inductor_ir_path, repo=repo
                     )
+                for node in graph.nodes:
+                    if node.source_file is not None:
+                        node.source_file = redactor.normalize_path(node.source_file, repo=repo)
 
         # iterations defaults to [] in the schema; pass it only when non-empty so the
         # exclude_unset serializer keeps a structure-only capture byte-identical to before.

@@ -79,6 +79,10 @@ pub struct Recompilation {
         with = "crate::non_finite::opt"
     )]
     pub wall_clock_ms: Option<f64>,
+    /// Source file:line of the recompiled function (the compiled region), parsed from torch's
+    /// recompile log. Lets the summary point at where the recompiling region is defined.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_location: Option<SourceLocation>,
 }
 
 /// A compiled graph artifact (`compiled_graphs[]`). Cross-references `kernels[]` and guards
@@ -141,6 +145,14 @@ pub struct FxNode {
     /// `float32`). Absent under the same conditions as `out_shape`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_dtype: Option<String>,
+    /// Source file of the node's defining line — the innermost user frame of
+    /// `node.meta['stack_trace']`, path-normalized at collection (D11). Absent when the trace was
+    /// unavailable. Lets the diff and fusion sections point a finding at the exact source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_file: Option<String>,
+    /// 1-based line of the node's defining source, paired with `source_file`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_line: Option<u64>,
 }
 
 /// One named compile phase with its wall-clock cost (`compile_phases[]`).

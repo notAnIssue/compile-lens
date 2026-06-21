@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Source locations across the tools** — each finding now points at where to act. The collector
+  captures every FX node's defining source line (the innermost user frame of `node.meta`'s stack
+  trace, path-normalized at collection), so the **IR diff** names the modified op, *what* changed
+  (operand reorder / attribute delta), and *where* (`file:line`); **fusion** shows the chain's source
+  range; the **recompile summary** names the recompiling region's `file:line` (the file:line torch's
+  log already carried, ADR-029's deferred field); and the **divergence** finding names the divergent
+  layer's module type. The **fusion section** is reworked for actionability: it leads with HBM
+  *saved* (a percentage and human-readable bytes, not a raw count), a memory-bound `≤ speedup` upper
+  bound, collapses identical opportunities to one `×N` row, and adds a plain "what to change / how to
+  apply" (a fused epilogue kernel) block.
 - `cl.capture(model, example_input, …)` — the active, one-call capture (ADR-041). Where
   `cl.session()` is a passive context manager that only tees the recompile log, `cl.capture()` takes
   the model and drives every built collector in one call — graph capture (fusion / diff), the

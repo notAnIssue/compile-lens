@@ -231,6 +231,7 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
             let mut fx_node_ids = vec![m.gemm1, m.add];
             fx_node_ids.extend(m.rms_norm_ids);
             fx_node_ids.push(m.gemm2);
+            let src_lineno_range = derive_source(&by_id, &fx_node_ids);
 
             let (shape, baseline_hbm_bytes, fused_hbm_bytes, estimated_speedup) = match cost {
                 Some((s, dtype, baseline, fused, speedup)) => (
@@ -252,7 +253,7 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
                 pattern_id: "A".to_string(),
                 location: Some(FusionLocation {
                     fx_node_ids,
-                    src_lineno_range: None,
+                    src_lineno_range,
                 }),
                 shape,
                 baseline_hbm_bytes,
@@ -279,6 +280,30 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
 /// in a **square contraction** (`K0 == M`), and there disambiguation relies on the activation
 /// preceding the weight in the operand order — the convention torch's `mm`/`addmm` emit (the
 /// activation is the first matrix operand). The dtype is taken from GEMM1's output.
+/// The source span the matched chain covers, as `"file:start-end"` (or `"file:line"` for a single
+/// line), from the chain nodes' captured `source_file`/`source_line`. `None` when no chain node
+/// carried a source location. Lets the report point the fusion at the exact lines to change.
+fn derive_source(by_id: &HashMap<&str, &FxNode>, ids: &[String]) -> Option<String> {
+    let mut file: Option<&str> = None;
+    let mut lines: Vec<u64> = Vec::new();
+    for id in ids {
+        if let Some(node) = by_id.get(id.as_str()) {
+            if let (Some(f), Some(l)) = (node.source_file.as_deref(), node.source_line) {
+                file.get_or_insert(f);
+                lines.push(l);
+            }
+        }
+    }
+    let file = file?;
+    let min = lines.iter().min()?;
+    let max = lines.iter().max()?;
+    Some(if min == max {
+        format!("{file}:{min}")
+    } else {
+        format!("{file}:{min}-{max}")
+    })
+}
+
 fn derive_shape(by_id: &HashMap<&str, &FxNode>, m: &PatternAMatch) -> Option<(Shape, String)> {
     let g1 = by_id.get(m.gemm1.as_str())?;
     let g2 = by_id.get(m.gemm2.as_str())?;
@@ -547,6 +572,8 @@ mod tests {
             attrs: Default::default(),
             out_shape: Vec::new(),
             out_dtype: None,
+            source_file: None,
+            source_line: None,
         }
     }
 
