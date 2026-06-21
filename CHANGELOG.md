@@ -35,8 +35,8 @@ number** (real is ~1.05–1.15× on LLaMA shapes). The FX collector captures nod
 (ADR-038) so the cost model runs end-to-end; a dynamic (symbolic) shape leaves the cost unset rather
 than guessed. Exposed as `cl fusion-detect <session.cls.json>` (`--format markdown|json`,
 `--min-speedup`, `--top-k`), ranked by speedup — **suggest-only and read-only**: it reads the graph,
-never mutates it, never runs a kernel, and names an `epilogue_kit.ops.*` kernel by string only (the
-seam to apply the fusion). Based on the CODA fusion technique (Guo et al., arXiv:2605.19269).
+never mutates it, never runs a kernel, and describes the fusion to apply as a plain-language string
+(it names no kernel, library, or API). Based on the CODA fusion technique (Guo et al., arXiv:2605.19269).
 
 Tool 5 (`kernel-roofline`) complete: a roofline-pruned autotune filter for Triton kernels. A
 three-layer cost model — a Williams theoretical lower bound, an empirical predictor (four

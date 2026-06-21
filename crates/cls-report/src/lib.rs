@@ -533,7 +533,7 @@ fn fusion_section(artifact: &ClsArtifact, analyzed: Option<&[FusionOpportunity]>
         "<p class=\"muted\">Analytical HBM-traffic roofline (memory-bound upper bound, not \
          measured); suggest-only.</p>\n\
          <table>\n<thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th>\
-         <th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested kernel</th>\
+         <th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested fusion</th>\
          </tr></thead>\n<tbody>\n",
     );
     for f in opportunities {
@@ -553,12 +553,12 @@ fn fusion_section(artifact: &ClsArtifact, analyzed: Option<&[FusionOpportunity]>
             .map_or_else(|| "—".to_string(), |s| format!("{s:.2}×"));
         body.push_str(&format!(
             "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><strong>{}</strong></td>\
-             <td><code>{}</code></td></tr>\n",
+             <td>{}</td></tr>\n",
             esc(&f.pattern_id),
             esc(&shape),
             esc(&hbm),
             esc(&speedup),
-            esc(f.suggested_kernel.as_deref().unwrap_or("—")),
+            esc(f.suggested_fusion.as_deref().unwrap_or("—")),
         ));
     }
     body.push_str("</tbody>\n</table>\n");

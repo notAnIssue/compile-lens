@@ -75,8 +75,8 @@ fn report_runs_the_fusion_analyzer_for_the_crown_jewel_section() {
         "the analyzer found 3 opportunities in this fixture; the section must not be empty"
     );
     assert!(
-        html.contains("epilogue_kit.ops.fused_residual_rms_pattern"),
-        "the suggested-kernel column should render from the analyzed opportunities"
+        html.contains("fold per-row 1/rms into the second GEMM epilogue"),
+        "the suggested-fusion column should render from the analyzed opportunities"
     );
 }
 

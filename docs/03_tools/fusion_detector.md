@@ -1,14 +1,15 @@
 # Tool 6 — `fusion-detect`
 
 Find algebraic fusion opportunities a `torch.compile` graph leaves on the table — specifically the
-`GEMM → residual add → RMSNorm → GEMM` chain ("Pattern A") — estimate the HBM traffic a fused kernel
-would save, and suggest an epilogue kernel to apply it. Each opportunity carries its location, the
-GEMM shape, a baseline-vs-fused traffic estimate, a speedup, and a confidence.
+`GEMM → residual add → RMSNorm → GEMM` chain ("Pattern A") — and estimate the HBM traffic a fused
+kernel would save. Each opportunity carries its location, the GEMM shape, a baseline-vs-fused traffic
+estimate, a speedup, a confidence, and a plain-language description of the fusion to apply.
 
 `fusion-detect` is a **detector, not an optimizer**. It reads the serialized graph, never mutates it,
-never runs a kernel, and needs no torch at analysis time — it points at opportunities and estimates
-their value; you apply them by installing the epilogue kernel separately (see *The seam*). Treat the
-speedup as a *ranking signal*, not a promise — see *Part C*.
+never runs a kernel, and needs no torch at analysis time — it points at opportunities, estimates
+their value, and describes the fusion to apply; realizing the saving (writing the fused epilogue
+kernel) is your job, out of scope for the detector. Treat the speedup as a *ranking signal*, not a
+promise — see *Part C*.
 
 ## Part A — Theory & reference
 
@@ -49,12 +50,13 @@ This ratio is an **upper bound used to rank opportunities, not a number you will
 often compute-bound, so the achieved speedup is lower — on the order of 1.05–1.15× on LLaMA-shaped
 layers. The value of the estimate is *ordering*: which opportunity is worth your attention first.
 
-### The seam to the kernel
+### Applying a fusion (out of scope)
 
-Each opportunity names a suggested kernel as a string (e.g. `epilogue_kit.ops.fused_residual_rms_pattern`).
-That is a *reference only* — this tool never imports or calls it. The fused kernel lives in a separate
-package; install it and wire the suggested op in yourself to realize the saving. The detector's job
-ends at "here is a foldable pattern worth ~Nx, and this is the kernel that folds it."
+Each opportunity carries a plain-language `suggested_fusion` — for Pattern A, "fold per-row 1/rms into
+the second GEMM epilogue". That is a *description of the transformation*, not a kernel reference: the
+tool names no library, imports nothing, and calls nothing. Realizing the saving means writing (or
+reusing) a fused epilogue kernel yourself and wiring it in. The detector's job ends at "here is a
+foldable pattern worth ~Nx, and here is the fusion that folds it."
 
 ## Part B — Examples
 
@@ -77,7 +79,7 @@ K0=4096, N=11008, K1=4096, bf16):
 - Baseline HBM traffic: 1757 MB
 - CODA-fused HBM traffic: 861 MB
 - Estimated speedup: ~2.04× (memory-bound upper bound — ranks opportunities, not a promise; real is lower, ~1.05–1.15× per the paper, GEMMs being compute-bound)
-- Suggested kernel: epilogue_kit.ops.fused_residual_rms_pattern
+- Suggested fusion: fold per-row 1/rms into the second GEMM epilogue
 - Confidence: high
 ```
 
@@ -114,15 +116,15 @@ A detector that overstates its reach is worse than none. What this tool does *no
   shape/traffic/speedup are left blank rather than guessed.
 - **Forward graphs only.** Training/backward subgraphs are never analyzed by design; a graph carrying
   a backward-marked op is skipped wholesale.
-- **Suggest-only.** It reports and estimates; it does not apply the fusion or call any kernel. Apply
-  the suggestion by installing the epilogue kernel package yourself.
+- **Suggest-only.** It reports, estimates, and describes the fusion; it does not apply it or call any
+  kernel. Realizing the saving means writing the fused epilogue kernel yourself.
 - **Conservative on escapes.** If an intermediate tensor in the chain also feeds something outside
   the pattern, the fusion isn't safe to fold, so the opportunity is not reported. This favors
   precision over recall — it may stay silent on a pattern that a human could fold with care.
 - **It reports what's foldable, not what Inductor already folded.** The estimate is the traffic of
   the *unfused* baseline vs the *fully-fused* kernel. If Inductor already performed part of the
   fusion (e.g. kept an intermediate on-chip between the two GEMMs), the marginal saving from
-  installing the epilogue kernel is smaller than the headline ratio. Measure before and after.
+  the epilogue fusion is smaller than the headline ratio. Measure before and after.
 
 ## Related
 

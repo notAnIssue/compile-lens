@@ -9,7 +9,7 @@
 
 Tool 6 (the CODA-style algebraic fusion-opportunity detector) finds `GEMM-Residual-RMSNorm-GEMM`
 patterns in a `torch.compile` FX graph, judges foldability, estimates baseline-vs-fused HBM traffic,
-and suggests an `epilogue_kit.ops.*` kernel — suggest-only, no graph mutation, no execution.
+and describes the fusion to apply — suggest-only, no graph mutation, no execution.
 
 The matcher could be written in **Python** (operating directly on the live `torch.fx.Graph`) or in
 **Rust** (operating on the FX graph already serialized into the `.cls.json`). The choice sets where

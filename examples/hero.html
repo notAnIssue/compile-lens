@@ -48,11 +48,11 @@
 <summary><h2>Fusion opportunities (CODA)</h2></summary>
 <div class="body"><p class="muted">Analytical HBM-traffic roofline (memory-bound upper bound, not measured); suggest-only.</p>
 <table>
-<thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th><th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested kernel</th></tr></thead>
+<thead><tr><th>pattern</th><th>shape (M×N×K0×K1)</th><th>HBM bytes: baseline → fused</th><th>est. speedup</th><th>suggested fusion</th></tr></thead>
 <tbody>
-<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td><code>epilogue_kit.ops.fused_residual_rms_pattern</code></td></tr>
-<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td><code>epilogue_kit.ops.fused_residual_rms_pattern</code></td></tr>
-<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td><code>epilogue_kit.ops.fused_residual_rms_pattern</code></td></tr>
+<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
+<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
+<tr><td><code>A</code></td><td>8×128×64×64</td><td>1.024e5 → 8.205e4</td><td><strong>1.25×</strong></td><td>fold per-row 1/rms into the second GEMM epilogue</td></tr>
 </tbody>
 </table>
 </div>

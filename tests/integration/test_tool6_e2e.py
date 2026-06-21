@@ -39,7 +39,7 @@ _SESSION_KW = {
     "torch_version": "2.6.0",
 }
 
-SUGGESTED_KERNEL = "epilogue_kit.ops.fused_residual_rms_pattern"
+SUGGESTED_FUSION = "fold per-row 1/rms into the second GEMM epilogue"
 
 
 class _Block(nn.Module):
@@ -125,7 +125,7 @@ def test_detects_three_pattern_a_opportunities_with_cost(tmp_path: Path) -> None
 
     for opp in opps:
         assert opp["pattern_id"] == "A"
-        assert opp["suggested_kernel"] == SUGGESTED_KERNEL
+        assert opp["suggested_fusion"] == SUGGESTED_FUSION
         # Real nn.RMSNorm lowers to the decomposed subgraph → medium; allow high if a torch
         # version emits a native aten.rms_norm instead.
         assert opp["confidence"] in {"medium", "high"}

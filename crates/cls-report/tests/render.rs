@@ -94,12 +94,12 @@ fn fusion_section_renders_the_crown_jewel() {
         "torch_version":"2.6.0","redaction_policy":"default-strict"},
         "fusion_opportunities":[{"pattern_id":"A","shape":{"m":4096,"n":4096,"k0":4096,"k1":4096,
         "dtype":"bfloat16"},"baseline_hbm_bytes":1.0e8,"fused_hbm_bytes":5.0e7,
-        "estimated_speedup":2.04,"suggested_kernel":"epilogue_kit.ops.gemm_rmsnorm",
+        "estimated_speedup":2.04,"suggested_fusion":"fold per-row 1/rms into the second GEMM epilogue",
         "confidence":"high"}]}"#,
     ));
     assert!(html.contains("Fusion opportunities (CODA)"));
     assert!(html.contains("2.04×"), "speedup shown: {html}");
-    assert!(html.contains("epilogue_kit.ops.gemm_rmsnorm"));
+    assert!(html.contains("fold per-row 1/rms into the second GEMM epilogue"));
     assert!(html.contains("4096×4096×4096×4096"));
 }
 

@@ -258,7 +258,9 @@ pub fn analyze(artifact: &ClsArtifact) -> Vec<FusionOpportunity> {
                 baseline_hbm_bytes,
                 fused_hbm_bytes,
                 estimated_speedup,
-                suggested_kernel: Some("epilogue_kit.ops.fused_residual_rms_pattern".to_string()),
+                suggested_fusion: Some(
+                    "fold per-row 1/rms into the second GEMM epilogue".to_string(),
+                ),
                 // Native exact match is high-confidence; a decomposed subgraph match is medium.
                 confidence: Some(if m.decomposed { "medium" } else { "high" }.to_string()),
             });
@@ -523,8 +525,8 @@ fn render_markdown(ranked: &[&FusionOpportunity]) -> String {
             }
         }
 
-        if let Some(kernel) = &opp.suggested_kernel {
-            let _ = writeln!(out, "- Suggested kernel: {kernel}");
+        if let Some(fusion) = &opp.suggested_fusion {
+            let _ = writeln!(out, "- Suggested fusion: {fusion}");
         }
         if let Some(confidence) = &opp.confidence {
             let _ = writeln!(out, "- Confidence: {confidence}");
@@ -766,8 +768,8 @@ mod tests {
         assert_eq!(found[0].pattern_id, "A");
         assert_eq!(found[0].confidence.as_deref(), Some("high"));
         assert_eq!(
-            found[0].suggested_kernel.as_deref(),
-            Some("epilogue_kit.ops.fused_residual_rms_pattern")
+            found[0].suggested_fusion.as_deref(),
+            Some("fold per-row 1/rms into the second GEMM epilogue")
         );
         let ids = &found[0].location.as_ref().unwrap().fx_node_ids;
         assert_eq!(ids, &vec!["g1", "add", "rms", "g2"]);
@@ -979,7 +981,7 @@ mod tests {
             baseline_hbm_bytes: Some(1_757_413_376.0),
             fused_hbm_bytes: Some(861_339_648.0),
             estimated_speedup: Some(2.04),
-            suggested_kernel: Some("epilogue_kit.ops.fused_residual_rms_pattern".to_string()),
+            suggested_fusion: Some("fold per-row 1/rms into the second GEMM epilogue".to_string()),
             confidence: Some("high".to_string()),
         }
     }
@@ -998,7 +1000,7 @@ mod tests {
             md.contains("upper bound"),
             "N10 honesty caveat must be present"
         );
-        assert!(md.contains("epilogue_kit.ops.fused_residual_rms_pattern"));
+        assert!(md.contains("fold per-row 1/rms into the second GEMM epilogue"));
         assert!(md.contains("Confidence: high"));
     }
 
