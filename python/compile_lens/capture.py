@@ -122,7 +122,11 @@ def _capture_divergence(
     """
     import torch  # noqa: PLC0415
 
-    from compile_lens.tools.divergence import divergence_session, divergence_to_record
+    from compile_lens.tools.divergence import (
+        attribute_divergence,
+        divergence_session,
+        divergence_to_record,
+    )
 
     torch._dynamo.reset()
     eager = model
@@ -133,7 +137,17 @@ def _capture_divergence(
     findings = ds.report(rtol=rtol, atol=atol)
     if not findings.diverged:
         return []
-    return [divergence_to_record(findings, divergence_id="div_001")]
+    # Localization found *where*; attribution finds *what* — toggle candidate inductor passes off,
+    # recompile, and minimize to the pass(es) whose removal makes the two agree (ADR-032).
+    attribution = attribute_divergence(
+        model,
+        (example_input,),
+        compile_fn=lambda m: torch.compile(m, dynamic=False),
+        rtol=rtol,
+        atol=atol,
+        findings=findings,
+    )
+    return [divergence_to_record(findings, divergence_id="div_001", attribution=attribution)]
 
 
 def capture(

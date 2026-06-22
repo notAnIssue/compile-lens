@@ -595,6 +595,17 @@ fn divergence_section(artifact: &ClsArtifact) -> String {
             Some(v) => format!("{v:.3e}"),
             None => "—".to_string(),
         };
+        // Lead the cause cell with the responsible inductor pass when the causal experiment found
+        // one (the actionable answer); fall back to the prose hint otherwise.
+        let cause = match d.attribution.as_ref() {
+            Some(a) if !a.responsible_passes.is_empty() => {
+                format!(
+                    "pass: <code>{}</code>",
+                    esc(&a.responsible_passes.join(", "))
+                )
+            }
+            _ => esc(d.suggested_cause.as_deref().unwrap_or("—")),
+        };
         body.push_str(&format!(
             "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
             esc(d
@@ -603,7 +614,7 @@ fn divergence_section(artifact: &ClsArtifact) -> String {
                 .unwrap_or("(none — within tolerance)")),
             max_diff,
             d.num_layers_compared,
-            esc(d.suggested_cause.as_deref().unwrap_or("—")),
+            cause,
         ));
     }
     body.push_str("</tbody>\n</table>\n");

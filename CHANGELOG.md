@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Divergence causal attribution (Tool 3, ADR-032).** Beyond localizing *where* eager and compiled
+  diverge, `cl.capture(check_divergence=True)` now finds *what* caused it: it toggles candidate
+  inductor passes off, recompiles, and minimizes (delta-debugging-lite) to the pass(es) whose
+  removal makes the two agree. The report's divergence cause column names the responsible pass (e.g.
+  `post_grad_custom_post_pass`); clean and inconclusive cases say so honestly. Pass-level only —
+  `torch._inductor.config` exposes pass toggles, not per-node fusion control.
 - **Source locations across the tools** — each finding now points at where to act. The collector
   captures every FX node's defining source line (the innermost user frame of `node.meta`'s stack
   trace, path-normalized at collection), so the **IR diff** names the modified op, *what* changed
